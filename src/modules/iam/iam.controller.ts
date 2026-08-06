@@ -224,7 +224,7 @@ export class IamController {
   @ApiBearerAuth('access-token')
   @ApiOkResponse({
     type: SuccessMessageResponse,
-    description: 'Refresh token revoked.',
+    description: 'Refresh token revoked.', 
   })
   @ApiUnauthorizedResponse({
     type: ErrorResponse,
