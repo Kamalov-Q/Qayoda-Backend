@@ -14,6 +14,8 @@ async function bootstrap() {
     }),
   );
 
+  app.enableCors({ origin: '*' });
+
   const config = new DocumentBuilder()
     .setTitle('Qayoda API')
     .setDescription(
@@ -57,4 +59,4 @@ async function bootstrap() {
     console.log(`Docs: http://localhost:${process.env.PORT ?? 3000}/docs`);
   });
 }
-bootstrap();
+void bootstrap();

@@ -1,0 +1,159 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Put,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiBadRequestResponse,
+  ApiBearerAuth,
+  ApiForbiddenResponse,
+  ApiNotFoundResponse,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
+import { ListingsService } from './listings.service';
+import { JwtAccessGuard } from '../iam/guards/jwt-access.guard';
+import { CurrentUser } from '../iam/guards/current-user.decorator';
+import { CreateListingDto } from './dto/create-listing.dto';
+import { ListingOwnershipGuard } from './guards/listing-ownership.guard';
+import { UpdateOffersDto } from './dto/update-offers.dto';
+import { UpdateGeometryDto } from './dto/update-geometry.dto';
+import { ErrorResponse } from '../iam/responses/error.response';
+import type { ListingRequest } from './types/listing-request.type';
+import type { AuthUser } from 'src/modules/iam/types/auth-user.type';
+
+// `type` has to be stated: the guarded routes take the request via @Req(), so
+// there is no @Param() for Swagger to reflect a type off.
+const LISTING_ID_PARAM = {
+  name: 'id',
+  type: String,
+  format: 'uuid',
+  example: '3f1c9d2e-8b4a-4a1e-9c7f-2d6b0e5a1f34',
+  description: 'Listing id.',
+};
+
+const NOT_OWNER = {
+  type: ErrorResponse,
+  description: 'The listing belongs to another user.',
+};
+
+const NO_LISTING = {
+  type: ErrorResponse,
+  description: 'No listing exists with this id.',
+};
+
+@ApiTags('Listings')
+@Controller('listings')
+export class ListingsController {
+  constructor(private readonly listingsService: ListingsService) {}
+
+  @ApiOperation({
+    summary: 'Publish a listing',
+    description: [
+      'Creates a listing together with its offers and property outline, and publishes it immediately — the listing comes back as `ACTIVE`.',
+      '',
+      'The outline is validated twice: for shape and bounds on the way in, then for geometric validity (self-intersection and the like) in PostGIS.',
+    ].join('\n'),
+  })
+  @ApiBadRequestResponse({
+    type: ErrorResponse,
+    description: 'Body failed validation, or the polygon is self-intersecting.',
+  })
+  @ApiUnauthorizedResponse({ type: ErrorResponse })
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAccessGuard)
+  @Post()
+  create(@CurrentUser() user: AuthUser, @Body() dto: CreateListingDto) {
+    return this.listingsService.create(user.userId, dto);
+  }
+
+  @ApiOperation({
+    summary: 'List your own listings',
+    description:
+      'Returns every listing owned by the caller, in any status — drafts and archived ones included.',
+  })
+  @ApiUnauthorizedResponse({ type: ErrorResponse })
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAccessGuard)
+  @Get('me/mine')
+  findMine(@CurrentUser() user: AuthUser) {
+    return this.listingsService.findMine(user.userId);
+  }
+
+  @ApiOperation({
+    summary: 'Fetch a listing',
+    description: 'Public endpoint: returns the listing with its offers and images.',
+  })
+  @ApiParam(LISTING_ID_PARAM)
+  @ApiBadRequestResponse({
+    type: ErrorResponse,
+    description: 'The id is not a valid UUID.',
+  })
+  @ApiNotFoundResponse(NO_LISTING)
+  @Get(':id')
+  findById(@Param('id', ParseUUIDPipe) id: string) {
+    return this.listingsService.findById(id);
+  }
+
+  @ApiOperation({
+    summary: 'Replace a listing’s offers',
+    description:
+      'Swaps the full set of offers in one transaction. Offers not present in the body are deleted, so send every purpose you want to keep.',
+  })
+  @ApiParam(LISTING_ID_PARAM)
+  @ApiBadRequestResponse({
+    type: ErrorResponse,
+    description: 'Body failed validation.',
+  })
+  @ApiUnauthorizedResponse({ type: ErrorResponse })
+  @ApiForbiddenResponse(NOT_OWNER)
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAccessGuard, ListingOwnershipGuard)
+  @Put(':id/offers')
+  updateOffers(@Req() req: ListingRequest, @Body() dto: UpdateOffersDto) {
+    return this.listingsService.updateOffers(req.listing, dto);
+  }
+
+  @ApiOperation({
+    summary: 'Redraw a listing’s outline',
+    description:
+      'Replaces the property outline. The centroid used for map pins is recomputed from the new outline.',
+  })
+  @ApiParam(LISTING_ID_PARAM)
+  @ApiBadRequestResponse({
+    type: ErrorResponse,
+    description: 'Body failed validation, or the polygon is self-intersecting.',
+  })
+  @ApiUnauthorizedResponse({ type: ErrorResponse })
+  @ApiForbiddenResponse(NOT_OWNER)
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAccessGuard, ListingOwnershipGuard)
+  @Put(':id/geometry')
+  updateGeometry(@Req() req: ListingRequest, @Body() dto: UpdateGeometryDto) {
+    return this.listingsService.updateGeometry(req.listing, dto);
+  }
+
+  @ApiOperation({
+    summary: 'Archive a listing',
+    description:
+      'Soft-delete: the listing moves to `ARCHIVED` and drops off the map, but the record is kept.',
+  })
+  @ApiParam(LISTING_ID_PARAM)
+  @ApiUnauthorizedResponse({ type: ErrorResponse })
+  @ApiForbiddenResponse(NOT_OWNER)
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAccessGuard, ListingOwnershipGuard)
+  @Delete(':id')
+  archive(@Req() req: ListingRequest) {
+    return this.listingsService.archive(req.listing);
+  }
+}

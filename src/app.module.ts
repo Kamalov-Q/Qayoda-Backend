@@ -9,6 +9,7 @@ import { IamModule } from './modules/iam/iam.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { ListingsModule } from './modules/listings/listings.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { ConfigModule } from '@nestjs/config';
     OtpModule,
     IamModule,
     NotificationsModule,
+    ListingsModule,
   ],
   controllers: [],
   providers: [

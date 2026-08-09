@@ -1,0 +1,8 @@
+export enum PropertyCategory {
+  APARTMENT = 'APARTMENT',
+  NON_RESIDENTIAL = 'NON_RESIDENTIAL',
+  HOUSE = 'HOUSE',
+  LAND = 'LAND',
+  BUILDING = 'BUILDING',
+  DACHA = 'DACHA',
+}

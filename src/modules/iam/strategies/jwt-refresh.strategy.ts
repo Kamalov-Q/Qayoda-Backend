@@ -4,6 +4,10 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 
+interface RefreshBody {
+  refreshToken: string;
+}
+
 @Injectable()
 export class JwtRefreshStrategy extends PassportStrategy(
   Strategy,
@@ -17,7 +21,10 @@ export class JwtRefreshStrategy extends PassportStrategy(
       passReqToCallback: true,
     });
   }
-  validate(req: Request, payload: { sub: string; jti: string }) {
+  validate(
+    req: Request<unknown, unknown, RefreshBody>,
+    payload: { sub: string; jti: string },
+  ) {
     return {
       userId: payload.sub,
       tokenId: payload.jti,
