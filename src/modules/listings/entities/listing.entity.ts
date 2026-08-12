@@ -12,6 +12,7 @@ import { PropertyCategory } from '../enums/property-category.enum';
 import { ListingStatus } from '../enums/listing-status.enum';
 import { ListingImage } from './listing-image.entity';
 import { ListingOffer } from './listing-offer.entity';
+import type { GeoJsonPoint, GeoJsonPolygon } from '../types/geojson.type';
 
 @Entity('listings')
 export class Listing {
@@ -47,9 +48,11 @@ export class Listing {
   @Column({ name: 'contact_phone', type: 'varchar', length: 20, nullable: true })
   contactPhone: string | null;
 
+  // GeoJSON, not WKT: TypeORM writes geography params through
+  // ST_GeomFromGeoJSON and reads them back through ST_AsGeoJSON.
   @Index({ spatial: true })
   @Column({ type: 'geography', spatialFeatureType: 'Polygon', srid: 4326 })
-  geom: string;
+  geom: GeoJsonPolygon;
 
   // Written by service at create/geometry-update time (synchronize:true can't
   // express Postgres GENERATED columns, so we compute it in SQL ourselves).
@@ -60,7 +63,7 @@ export class Listing {
     srid: 4326,
     nullable: true,
   })
-  centroid: string | null;
+  centroid: GeoJsonPoint | null;
 
   @OneToMany(() => ListingOffer, (o) => o.listing, { cascade: true })
   offers: ListingOffer[];

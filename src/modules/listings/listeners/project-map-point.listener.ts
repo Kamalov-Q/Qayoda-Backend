@@ -14,6 +14,7 @@ export class ProjectMapPointListener {
   @OnEvent('listing.published')
   @OnEvent('listing.geometry_changed')
   @OnEvent('listing.price_changed')
+  @OnEvent('listing.images_changed')
   async onChanged(payload: ListingEventPayload, eventId: string) {
     await withIdempotency(
       this.dataSource,
@@ -25,11 +26,20 @@ export class ProjectMapPointListener {
             `DELETE FROM listing_map_points WHERE listing_id = $1`,
             [payload.listingId],
           );
+          // `synchronize` gives every enum column its own Postgres type named
+          // `<table>_<column>_enum`, and Postgres will not implicitly cast
+          // between two of them — so the source enums are round-tripped through
+          // text into this table's own types. (A shared `enumName` across both
+          // entities is not an option: synchronize emits one CREATE TYPE per
+          // column and the second collides.)
           await manager.query(
             `
           INSERT INTO listing_map_points
             (listing_id, purpose, category, price, currency, centroid, thumb_url, updated_at)
-          SELECT l.id, o.purpose, l.category, o.price, o.currency, l.centroid, li.thumb_url, now()
+          SELECT l.id,
+                 o.purpose::text::listing_map_points_purpose_enum,
+                 l.category::text::listing_map_points_category_enum,
+                 o.price, o.currency, l.centroid, li.thumb_url, now()
           FROM listings l
           JOIN listing_offers o ON o.listing_id = l.id AND o.is_active
           LEFT JOIN listing_images li ON li.listing_id = l.id AND li.is_primary

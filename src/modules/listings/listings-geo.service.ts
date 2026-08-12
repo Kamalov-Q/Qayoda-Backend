@@ -36,7 +36,6 @@ export interface ViewportPointFeature {
 interface GeometryCheckRow {
   valid: boolean;
   reason: string;
-  wkt: string;
 }
 
 @Injectable()
@@ -127,19 +126,25 @@ export class ListingsGeoService {
 
   /**
    * Validates GeoJSON rings in PostGIS (self-intersection etc. — second line
-   * of defense behind the DTO validator) and returns an EWKT literal that
-   * TypeORM passes straight through into a geography column.
+   * of defense behind the DTO validator) and hands back the polygon as GeoJSON.
+   *
+   * GeoJSON rather than WKT because that is the only shape TypeORM accepts for a
+   * geography column: the driver JSON-stringifies the parameter and wraps it in
+   * `ST_GeomFromGeoJSON`, so a WKT literal arrives as a quoted string and dies
+   * with "unknown GeoJSON type".
    */
-  async toGeographyLiteral(coordinates: PolygonCoordinates): Promise<string> {
-    const geojson = JSON.stringify({ type: 'Polygon', coordinates });
+  async toValidatedPolygon(
+    coordinates: PolygonCoordinates,
+  ): Promise<GeoJsonPolygon> {
+    const polygon: GeoJsonPolygon = { type: 'Polygon', coordinates };
     const rows = await this.dataSource.query<GeometryCheckRow[]>(
-      `SELECT ST_IsValid(g) AS valid, ST_IsValidReason(g) AS reason, ST_AsText(g) AS wkt
+      `SELECT ST_IsValid(g) AS valid, ST_IsValidReason(g) AS reason
        FROM (SELECT ST_GeomFromGeoJSON($1) AS g) AS sub`,
-      [geojson],
+      [JSON.stringify(polygon)],
     );
-    const { valid, reason, wkt } = rows[0];
+    const { valid, reason } = rows[0];
     if (!valid)
       throw new BadRequestException(`Invalid polygon geometry: ${reason}`);
-    return `SRID=4326;${wkt}`;
+    return polygon;
   }
 }

@@ -10,6 +10,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ListingsModule } from './modules/listings/listings.module';
+import { MediaModule } from './modules/media/media.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { ListingsModule } from './modules/listings/listings.module';
     IamModule,
     NotificationsModule,
     ListingsModule,
+    MediaModule,
   ],
   controllers: [],
   providers: [

@@ -10,6 +10,8 @@ import { ListingStatus } from './enums/listing-status.enum';
 import { UpdateListingDto } from './dto/update-listing.dto';
 import { UpdateOffersDto } from './dto/update-offers.dto';
 import { UpdateGeometryDto } from './dto/update-geometry.dto';
+import { ListingImage } from './entities/listing-image.entity';
+import { UpdateImagesDto } from './dto/update-images.dto';
 
 @Injectable()
 export class ListingsService {
@@ -21,7 +23,7 @@ export class ListingsService {
   ) {}
 
   async create(ownerId: string, dto: CreateListingDto) {
-    const geomLiteral = await this.geo.toGeographyLiteral(dto.coordinates);
+    const geom = await this.geo.toValidatedPolygon(dto.coordinates);
 
     const listingId = await this.dataSource.transaction(async (manager) => {
       const listingRepo = manager.getRepository(Listing);
@@ -42,7 +44,7 @@ export class ListingsService {
           totalFloors: dto.totalFloors ?? null,
           address: dto.address ?? null,
           contactPhone: dto.contactPhone ?? null,
-          geom: geomLiteral,
+          geom,
           status: ListingStatus.ACTIVE,
           publishedAt: new Date(),
         }),
@@ -58,6 +60,21 @@ export class ListingsService {
           offerRepo.create({ ...o, listingId: listing.id }),
         ),
       );
+
+      if (dto.images?.length) {
+        const imageRepo = manager.getRepository(ListingImage);
+        await imageRepo.save(
+          dto.images.map((img, i) =>
+            imageRepo.create({
+              ...img,
+              listingId: listing.id,
+              isPrimary: dto.images!.some((x) => x.isPrimary)
+                ? img.isPrimary
+                : i === 0,
+            }),
+          ),
+        );
+      }
 
       await this.outbox.publish(
         'listing.published',
@@ -94,6 +111,47 @@ export class ListingsService {
     return this.findById(listing.id);
   }
 
+  async updateImages(listing: Listing, dto: UpdateImagesDto) {
+    await this.dataSource.transaction(async (manager) => {
+      const imageRepo = manager.getRepository(ListingImage);
+
+      const existing = await imageRepo.findBy({ listingId: listing.id });
+      const keptUrls = new Set(dto.images.map((i) => i.url));
+      const removed = existing
+        .filter((img) => !keptUrls.has(img.url))
+        .flatMap((img) => [img.url, img.thumbUrl]);
+
+      await imageRepo.delete({ listingId: listing.id });
+      await imageRepo.save(
+        dto.images.map((img, i) =>
+          imageRepo.create({
+            ...img,
+            listingId: listing.id,
+            isPrimary: dto.images.some((x) => x.isPrimary)
+              ? img.isPrimary
+              : i === 0,
+          }),
+        ),
+      );
+
+      await this.outbox.publish(
+        'listing.images_changed',
+        { listingId: listing.id },
+        manager,
+      );
+
+      if (removed.length) {
+        await this.outbox.publish(
+          'media.files_orphaned',
+          { urls: removed },
+          manager,
+        );
+      }
+    });
+
+    return this.findById(listing.id);
+  }
+
   async updateOffers(listing: Listing, dto: UpdateOffersDto) {
     await this.dataSource.transaction(async (manager) => {
       const offerRepo = manager.getRepository(ListingOffer);
@@ -113,14 +171,16 @@ export class ListingsService {
   }
 
   async updateGeometry(listing: Listing, dto: UpdateGeometryDto) {
-    const geomLiteral = await this.geo.toGeographyLiteral(dto.coordinates);
+    const geom = await this.geo.toValidatedPolygon(dto.coordinates);
 
     await this.dataSource.transaction(async (manager) => {
       await manager.query(
         `UPDATE listings
-         SET geom = $1, centroid = ST_Centroid($1::geometry)::geography, updated_at = now()
+         SET geom     = ST_SetSRID(ST_GeomFromGeoJSON($1), 4326)::geography,
+             centroid = ST_Centroid(ST_SetSRID(ST_GeomFromGeoJSON($1), 4326))::geography,
+             updated_at = now()
          WHERE id = $2`,
-        [geomLiteral, listing.id],
+        [JSON.stringify(geom), listing.id],
       );
 
       await this.outbox.publish(

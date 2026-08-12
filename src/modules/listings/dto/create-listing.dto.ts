@@ -1,4 +1,5 @@
 import {
+  ArrayMaxSize,
   ArrayMinSize,
   IsArray,
   IsEnum,
@@ -17,6 +18,7 @@ import { PropertyCategory } from '../enums/property-category.enum';
 import { ValidPolygon } from '../validators/valid-polygon.validator';
 import { ApiPolygonCoordinates } from '../decorators/api-polygon-coordinates.decorator';
 import type { PolygonCoordinates } from '../types/geojson.type';
+import { ImageInputDto } from './update-images.dto';
 
 export class OfferInputDto {
   @ApiProperty({
@@ -142,4 +144,11 @@ export class CreateListingDto {
   @ValidateNested({ each: true })
   @Type(() => OfferInputDto)
   offers: OfferInputDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(15)
+  @ValidateNested({ each: true })
+  @Type(() => ImageInputDto)
+  images?: ImageInputDto[];
 }

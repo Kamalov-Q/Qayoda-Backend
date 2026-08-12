@@ -30,6 +30,7 @@ import { UpdateGeometryDto } from './dto/update-geometry.dto';
 import { ErrorResponse } from '../iam/responses/error.response';
 import type { ListingRequest } from './types/listing-request.type';
 import type { AuthUser } from 'src/modules/iam/types/auth-user.type';
+import { UpdateImagesDto } from './dto/update-images.dto';
 
 // `type` has to be stated: the guarded routes take the request via @Req(), so
 // there is no @Param() for Swagger to reflect a type off.
@@ -84,14 +85,17 @@ export class ListingsController {
   @ApiUnauthorizedResponse({ type: ErrorResponse })
   @ApiBearerAuth('access-token')
   @UseGuards(JwtAccessGuard)
-  @Get('me/mine')
+  // Must stay declared above `:id` — routes match in declaration order, and
+  // `mine` would otherwise be read as a listing id and rejected by ParseUUIDPipe.
+  @Get('mine')
   findMine(@CurrentUser() user: AuthUser) {
     return this.listingsService.findMine(user.userId);
   }
 
   @ApiOperation({
     summary: 'Fetch a listing',
-    description: 'Public endpoint: returns the listing with its offers and images.',
+    description:
+      'Public endpoint: returns the listing with its offers and images.',
   })
   @ApiParam(LISTING_ID_PARAM)
   @ApiBadRequestResponse({
@@ -140,6 +144,12 @@ export class ListingsController {
   @Put(':id/geometry')
   updateGeometry(@Req() req: ListingRequest, @Body() dto: UpdateGeometryDto) {
     return this.listingsService.updateGeometry(req.listing, dto);
+  }
+
+  @UseGuards(JwtAccessGuard, ListingOwnershipGuard)
+  @Put(':id/images')
+  updateImages(@Req() req: ListingRequest, @Body() dto: UpdateImagesDto) {
+    return this.listingsService.updateImages(req.listing, dto);
   }
 
   @ApiOperation({

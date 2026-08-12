@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { PropertyCategory } from '../enums/property-category.enum';
 import { OfferPurpose } from '../enums/offer-purpose.enum';
+import type { GeoJsonPoint } from '../types/geojson.type';
 
 @Entity('listing_map_points')
 export class ListingMapPoint {
@@ -20,7 +21,7 @@ export class ListingMapPoint {
   @Column({ type: 'char', length: 3 }) currency: string;
   @Index({ spatial: true })
   @Column({ type: 'geography', spatialFeatureType: 'Point', srid: 4326 })
-  centroid: string;
+  centroid: GeoJsonPoint;
   @Column({ name: 'thumb_url', type: 'text', nullable: true }) thumbUrl:
     string | null;
   @UpdateDateColumn({ name: 'updated_at' }) updatedAt: Date;
