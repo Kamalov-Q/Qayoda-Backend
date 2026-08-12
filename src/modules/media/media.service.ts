@@ -123,6 +123,15 @@ export class MediaService {
   }
 
   private async putToBunny(storagePath: string, data: Buffer): Promise<void> {
+    // `fetch` rejects Buffer: undici types its body as NodeJS.ArrayBufferView,
+    // which does not admit the `ArrayBufferLike` generic that Buffer carries.
+    // This is a view over the same memory, not a copy — it matters at image size.
+    const body = new Uint8Array(
+      data.buffer as ArrayBuffer,
+      data.byteOffset,
+      data.byteLength,
+    );
+
     const res = await fetch(
       `https://${this.host}/${this.zone}/${storagePath}`,
       {
@@ -131,7 +140,7 @@ export class MediaService {
           AccessKey: this.key,
           'Content-Type': 'application/octet-stream',
         },
-        body: data,
+        body,
       },
     );
 

@@ -10,8 +10,6 @@ import type {
 
 import { POLYGON_ZOOM_THRESHOLD } from './listings.constants';
 
-export { POLYGON_ZOOM_THRESHOLD };
-
 /**
  * `price` is a Postgres `numeric`: node-postgres hands numerics back as
  * strings from raw queries to avoid float precision loss.
@@ -20,6 +18,9 @@ export interface ViewportPolygonFeature {
   id: string;
   geom: GeoJsonPolygon;
   centroid: GeoJsonPoint | null;
+  title: string | null;
+  rooms: number | null;
+  areaM2: string | null;
   price: string;
   currency: string;
   thumbUrl: string | null;
@@ -69,21 +70,25 @@ export class ListingsGeoService {
 
     return this.dataSource.query<ViewportPolygonFeature[]>(
       `
-      SELECT
-        l.id,
-        ST_AsGeoJSON(l.geom)::json      AS geom,
-        ST_AsGeoJSON(l.centroid)::json  AS centroid,
-        o.price, o.currency,
-        li.thumb_url                    AS "thumbUrl"
-      FROM listings l
-      JOIN listing_offers o ON o.listing_id = l.id AND o.purpose = $1 AND o.is_active
-      LEFT JOIN listing_images li ON li.listing_id = l.id AND li.is_primary
-      WHERE l.status = 'ACTIVE'
-        AND ST_Intersects(l.geom, ST_MakeEnvelope($2, $3, $4, $5, 4326))
-        ${categoryFilter} ${priceMinFilter} ${priceMaxFilter}
-      ORDER BY l.published_at DESC NULLS LAST
-      LIMIT 500
-      `,
+  SELECT
+    l.id,
+    ST_AsGeoJSON(l.geom)::json      AS geom,
+    ST_AsGeoJSON(l.centroid)::json  AS centroid,
+    l.title,
+    l.rooms,
+    l.area_m2                        AS "areaM2",
+    o.price, o.currency,
+    li.thumb_url                    AS "thumbUrl"
+  FROM listings l
+  JOIN listing_offers o ON o.listing_id = l.id AND o.purpose = $1 AND o.is_active
+  LEFT JOIN listing_images li ON li.listing_id = l.id AND li.is_primary
+  WHERE l.status = 'ACTIVE'
+    AND l.centroid IS NOT NULL
+    AND ST_Intersects(l.geom, ST_MakeEnvelope($2, $3, $4, $5, 4326))
+    ${categoryFilter} ${priceMinFilter} ${priceMaxFilter}
+  ORDER BY l.published_at DESC NULLS LAST
+  LIMIT 500
+  `,
       params,
     );
   }
