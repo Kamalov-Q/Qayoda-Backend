@@ -209,6 +209,41 @@ export class ListingsService {
 
     return { success: true };
   }
+
+  /**
+   * The inverse of archive(): back to `ACTIVE`, and back onto the map.
+   *
+   * `listing.published` is the event to re-emit — the map-point projector
+   * treats it as "rebuild this listing's point from scratch", and its INSERT
+   * only fires for `ACTIVE` rows, which this transaction has committed by the
+   * time the outbox relay dispatches.
+   *
+   * Caveat: archiving also deletes the image FILES from Bunny (see
+   * DeleteListingImageListener) while keeping the `listing_images` rows, so a
+   * restored listing comes back pointing at deleted files and needs its photos
+   * re-uploaded. If archive is meant to be reversible, that listener is the
+   * thing to reconsider.
+   */
+  async restore(listing: Listing) {
+    // Idempotent: restoring a live listing is a no-op rather than an error, so
+    // a double tap over a flaky connection cannot fail the second time.
+    if (listing.status !== ListingStatus.ARCHIVED) {
+      return this.findById(listing.id);
+    }
+
+    await this.dataSource.transaction(async (manager) => {
+      await manager.update(Listing, listing.id, {
+        status: ListingStatus.ACTIVE,
+      });
+      await this.outbox.publish(
+        'listing.published',
+        { listingId: listing.id },
+        manager,
+      );
+    });
+
+    return this.findById(listing.id);
+  }
 }
 
 function stripHtml(html: string): string {

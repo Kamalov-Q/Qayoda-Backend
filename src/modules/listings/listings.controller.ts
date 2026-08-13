@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Put,
   Req,
@@ -165,5 +166,24 @@ export class ListingsController {
   @Delete(':id')
   archive(@Req() req: ListingRequest) {
     return this.listingsService.archive(req.listing);
+  }
+
+  @ApiOperation({
+    summary: 'Restore an archived listing',
+    description: [
+      'Undoes an archive: the listing returns to `ACTIVE` and is projected back onto the map. Restoring a listing that is not archived changes nothing and returns it as-is.',
+      '',
+      'Note that archiving deletes the stored image files while keeping their rows, so a restored listing needs its photos re-uploaded via `PUT /listings/:id/images`.',
+    ].join('\n'),
+  })
+  @ApiParam(LISTING_ID_PARAM)
+  @ApiUnauthorizedResponse({ type: ErrorResponse })
+  @ApiForbiddenResponse(NOT_OWNER)
+  @ApiNotFoundResponse(NO_LISTING)
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAccessGuard, ListingOwnershipGuard)
+  @Patch(':id/restore')
+  restore(@Req() req: ListingRequest) {
+    return this.listingsService.restore(req.listing);
   }
 }
