@@ -14,7 +14,7 @@ async function bootstrap() {
     }),
   );
 
-  app.enableCors({ origin: '*' });
+  app.enableCors({ origin: true, credentials: true });
 
   const config = new DocumentBuilder()
     .setTitle('Qayoda API')
@@ -54,7 +54,7 @@ async function bootstrap() {
     swaggerOptions: { persistAuthorization: true },
   });
 
-  await app.listen(process.env.PORT ?? 3000, () => {
+  await app.listen(process.env.PORT ?? 3000, '0.0.0.0', () => {
     console.log(`Server listening on port ${process.env.PORT ?? 3000}`);
     console.log(`Docs: http://localhost:${process.env.PORT ?? 3000}/docs`);
   });
