@@ -39,6 +39,16 @@ interface GeometryCheckRow {
   reason: string;
 }
 
+/**
+ * `%` and `_` are wildcards inside ILIKE patterns, so someone literally
+ * searching "12_kvartal" would otherwise match any character in the gap.
+ * Parameter binding already prevents injection; this only neutralises pattern
+ * metacharacters (backslash is Postgres's default ESCAPE character).
+ */
+function toLikePattern(value: string): string {
+  return `%${value.replace(/[\\%_]/g, '\\$&')}%`;
+}
+
 @Injectable()
 export class ListingsGeoService {
   constructor(private readonly dataSource: DataSource) {}
@@ -67,6 +77,11 @@ export class ListingsGeoService {
       params.push(q.priceMax);
       priceMaxFilter = `AND o.price <= $${++i}`;
     }
+    let addressFilter = '';
+    if (q.address) {
+      params.push(toLikePattern(q.address));
+      addressFilter = `AND l.address ILIKE $${++i}`;
+    }
 
     return this.dataSource.query<ViewportPolygonFeature[]>(
       `
@@ -85,7 +100,7 @@ export class ListingsGeoService {
   WHERE l.status = 'ACTIVE'
     AND l.centroid IS NOT NULL
     AND ST_Intersects(l.geom, ST_MakeEnvelope($2, $3, $4, $5, 4326))
-    ${categoryFilter} ${priceMinFilter} ${priceMaxFilter}
+    ${categoryFilter} ${priceMinFilter} ${priceMaxFilter} ${addressFilter}
   ORDER BY l.published_at DESC NULLS LAST
   LIMIT 500
   `,
@@ -111,6 +126,13 @@ export class ListingsGeoService {
       params.push(q.priceMax);
       priceMaxFilter = `AND price <= $${++i}`;
     }
+    let addressFilter = '';
+    if (q.address) {
+      params.push(toLikePattern(q.address));
+      // NULL ILIKE anything is NULL, so address-less listings drop out of an
+      // address search — which is the right reading of "filter by address".
+      addressFilter = `AND address ILIKE $${++i}`;
+    }
 
     return this.dataSource.query<ViewportPointFeature[]>(
       `
@@ -122,7 +144,7 @@ export class ListingsGeoService {
       FROM listing_map_points
       WHERE purpose = $1
         AND ST_Intersects(centroid, ST_MakeEnvelope($2, $3, $4, $5, 4326))
-        ${categoryFilter} ${priceMinFilter} ${priceMaxFilter}
+        ${categoryFilter} ${priceMinFilter} ${priceMaxFilter} ${addressFilter}
       LIMIT 1000
       `,
       params,

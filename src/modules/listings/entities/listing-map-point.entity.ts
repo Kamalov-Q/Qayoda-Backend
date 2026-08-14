@@ -24,5 +24,7 @@ export class ListingMapPoint {
   centroid: GeoJsonPoint;
   @Column({ name: 'thumb_url', type: 'text', nullable: true }) thumbUrl:
     string | null;
+  /** Denormalised for the viewport's address filter — never returned to clients. */
+  @Column({ type: 'text', nullable: true }) address: string | null;
   @UpdateDateColumn({ name: 'updated_at' }) updatedAt: Date;
 }

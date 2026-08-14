@@ -1,5 +1,14 @@
-import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsNumber, IsOptional, Max, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import {
+  IsEnum,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { OfferPurpose } from '../enums/offer-purpose.enum';
 import { PropertyCategory } from '../enums/property-category.enum';
@@ -92,4 +101,23 @@ export class MapViewportQueryDto {
   @IsNumber()
   @Min(0)
   priceMax?: number;
+
+  @ApiPropertyOptional({
+    example: 'Chilonzor',
+    maxLength: 120,
+    description:
+      'Case-insensitive substring match against the listing address. Omit (or send blank) to skip.',
+  })
+  @IsOptional()
+  // Blank after trimming means "not filtering", same as omitting the param —
+  // a bare `address=` in the query string must not silently exclude every
+  // listing whose address is NULL.
+  @Transform(({ value }: { value: unknown }) => {
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    return trimmed === '' ? undefined : trimmed;
+  })
+  @IsString()
+  @MaxLength(120)
+  address?: string;
 }
