@@ -1,6 +1,7 @@
 import {
   ConflictException,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { UserRepository } from './repositories/user.repository';
@@ -31,9 +32,22 @@ export class IamService {
     const user = await this.users.findByEmail(email);
     const exists = !!user;
 
+    // LOGIN and REGISTER fail loudly on the wrong account state. The silent
+    // no-send this used to do read as anti-enumeration, but the login screen
+    // itself confirms which of the two flows applies to an address the moment
+    // you pick one — so the silence protected nothing and cost real users an
+    // OTP screen waiting for a code that was never sent.
+    if (purpose === OtpPurpose.LOGIN && !exists)
+      throw new NotFoundException('No account with this email');
+    if (purpose === OtpPurpose.REGISTER && exists)
+      throw new ConflictException('Account already in use!');
+
+    // RESET_PASSWORD stays silent: a "forgot password" form is the classic
+    // address-probing target, and its user already believes they have an
+    // account — "check your inbox" is the honest answer either way.
     const shouldSend =
-      (purpose === OtpPurpose.REGISTER && !exists) ||
-      (purpose === OtpPurpose.LOGIN && exists) ||
+      purpose === OtpPurpose.LOGIN ||
+      purpose === OtpPurpose.REGISTER ||
       (purpose === OtpPurpose.RESET_PASSWORD && exists) ||
       purpose === OtpPurpose.CHANGE_EMAIL;
 

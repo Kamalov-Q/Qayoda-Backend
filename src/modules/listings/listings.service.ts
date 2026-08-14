@@ -12,11 +12,13 @@ import { UpdateOffersDto } from './dto/update-offers.dto';
 import { UpdateGeometryDto } from './dto/update-geometry.dto';
 import { ListingImage } from './entities/listing-image.entity';
 import { UpdateImagesDto } from './dto/update-images.dto';
+import { ListingSaveRepository } from './repositories/listing-save.repository';
 
 @Injectable()
 export class ListingsService {
   constructor(
     private readonly listings: ListingRepository,
+    private readonly saves: ListingSaveRepository,
     private readonly geo: ListingsGeoService,
     private readonly outbox: OutBoxService,
     private readonly dataSource: DataSource,
@@ -96,6 +98,25 @@ export class ListingsService {
 
   findMine(ownerId: string) {
     return this.listings.findMine(ownerId);
+  }
+
+  // ---- Saved listings ------------------------------------------------------
+
+  /** 404s on a missing listing; saving an existing one twice is a no-op. */
+  async saveListing(userId: string, listingId: string) {
+    const exists = await this.listings.existsBy({ id: listingId });
+    if (!exists) throw new NotFoundException('Listing not found');
+    await this.saves.saveFor(userId, listingId);
+    return { saved: true };
+  }
+
+  async unsaveListing(userId: string, listingId: string) {
+    await this.saves.unsaveFor(userId, listingId);
+    return { saved: false };
+  }
+
+  findSaved(userId: string) {
+    return this.saves.findSavedFor(userId);
   }
 
   async update(listing: Listing, dto: UpdateListingDto) {

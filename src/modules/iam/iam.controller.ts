@@ -14,6 +14,7 @@ import {
   ApiBody,
   ApiConflictResponse,
   ApiCreatedResponse,
+  ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -66,15 +67,22 @@ export class IamController {
     description: [
       'Sends a 6-digit code to the email address and returns the `requestId` needed to verify it.',
       '',
-      'The response is deliberately identical whether or not an account exists — a code is only actually delivered when the purpose fits the account state (`REGISTER` for unknown addresses, `LOGIN` and `RESET_PASSWORD` for known ones, `CHANGE_EMAIL` always). Do not use this endpoint to probe whether an address is registered.',
+      '`LOGIN` requires a registered address (404 otherwise) and `REGISTER` an unregistered one (409 otherwise) — the login screen already separates the two flows, so silence here only stranded users on an OTP screen with no code coming. `RESET_PASSWORD` stays deliberately silent about whether the address exists; `CHANGE_EMAIL` always sends.',
       '',
       'Rate limit: 3 requests per minute.',
     ].join('\n'),
   })
   @ApiCreatedResponse({
     type: OtpRequestResponse,
-    description:
-      'Code request accepted. Returned even when no code was delivered.',
+    description: 'Code sent (or, for RESET_PASSWORD, request accepted).',
+  })
+  @ApiNotFoundResponse({
+    type: ErrorResponse,
+    description: 'LOGIN with an email no account uses.',
+  })
+  @ApiConflictResponse({
+    type: ErrorResponse,
+    description: 'REGISTER with an email that already has an account.',
   })
   @ApiBadRequestResponse(BAD_BODY)
   @Throttle({ default: OTP_REQUEST_THROTTLE })

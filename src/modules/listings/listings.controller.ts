@@ -94,6 +94,55 @@ export class ListingsController {
   }
 
   @ApiOperation({
+    summary: 'List saved listings',
+    description:
+      'Every listing the caller has saved, most recently saved first, in the same shape as `/listings/mine`.',
+  })
+  @ApiUnauthorizedResponse({ type: ErrorResponse })
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAccessGuard)
+  // Same declaration-order rule as `mine`: must sit above `:id`.
+  @Get('saved')
+  findSaved(@CurrentUser() user: AuthUser) {
+    return this.listingsService.findSaved(user.userId);
+  }
+
+  @ApiOperation({
+    summary: 'Save a listing',
+    description:
+      'Bookmarks the listing for the caller. Idempotent — saving an already-saved listing changes nothing.',
+  })
+  @ApiParam(LISTING_ID_PARAM)
+  @ApiUnauthorizedResponse({ type: ErrorResponse })
+  @ApiNotFoundResponse(NO_LISTING)
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAccessGuard)
+  @Put(':id/save')
+  saveListing(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.listingsService.saveListing(user.userId, id);
+  }
+
+  @ApiOperation({
+    summary: 'Unsave a listing',
+    description:
+      'Removes the bookmark. Idempotent — unsaving something never saved is not an error.',
+  })
+  @ApiParam(LISTING_ID_PARAM)
+  @ApiUnauthorizedResponse({ type: ErrorResponse })
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAccessGuard)
+  @Delete(':id/save')
+  unsaveListing(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.listingsService.unsaveListing(user.userId, id);
+  }
+
+  @ApiOperation({
     summary: 'Fetch a listing',
     description:
       'Public endpoint: returns the listing with its offers and images.',
