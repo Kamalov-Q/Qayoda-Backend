@@ -15,4 +15,20 @@ export class IamFacade {
       email: user.email,
     };
   }
+
+  setPresence(userId: string, online: boolean) {
+    return this.iamService.setPresence(userId, online);
+  }
+
+  getPresence(userIds: string[]) {
+    return this.iamService.getPresence(userIds);
+  }
+
+  getPublicProfiles(userIds: string[]) {
+    return this.iamService.getPublicProfiles(userIds);
+  }
+
+  resetAllPresence() {
+    return this.iamService.resetAllPresence();
+  }
 }

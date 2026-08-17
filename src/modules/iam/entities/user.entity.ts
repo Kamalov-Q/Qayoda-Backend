@@ -19,6 +19,13 @@ export class User {
     string | null;
   @Column({ length: 16, default: 'user' }) role: 'user' | 'admin';
   @Column({ name: 'is_verified', default: false }) isVerified: boolean;
+
+  @Column({ name: 'last_seen_at', type: 'timestamptz', nullable: true })
+  lastSeenAt: Date | null;
+
+  @Column({ name: 'is_online', default: false })
+  isOnline: boolean;
+
   @CreateDateColumn({ name: 'created_at' }) createdAt: Date;
   @UpdateDateColumn({ name: 'updated_at' }) updatedAt: Date;
 }

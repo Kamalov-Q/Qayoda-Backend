@@ -265,6 +265,15 @@ export class ListingsService {
 
     return this.findById(listing.id);
   }
+
+  async getSummaries(listingIds: string[]) {
+    if (listingIds.length === 0) return [];
+
+    return this.listings.find({
+      where: listingIds.map((id) => ({ id })),
+      select: { id: true, ownerId: true, title: true, status: true },
+    });
+  }
 }
 
 function stripHtml(html: string): string {

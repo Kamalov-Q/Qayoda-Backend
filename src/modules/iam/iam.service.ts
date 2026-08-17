@@ -263,4 +263,48 @@ export class IamService {
       hasPassword: !!user.passwordHash,
     };
   }
+
+  async setPresence(userId: string, online: boolean): Promise<void> {
+    await this.users.update(userId, {
+      isOnline: online,
+      lastSeenAt: new Date(),
+    });
+  }
+
+  async getPresence(
+    userIds: string[],
+  ): Promise<{ userId: string; online: boolean; lastSeenAt: Date | null }[]> {
+    if (userIds.length === 0) return [];
+
+    const rows = await this.users.find({
+      where: userIds.map((id) => ({ id })),
+      select: { id: true, isOnline: true, lastSeenAt: true },
+    });
+
+    return rows.map((u) => ({
+      userId: u.id,
+      online: u.isOnline,
+      lastSeenAt: u.lastSeenAt,
+    }));
+  }
+
+  async getPublicProfiles(
+    userIds: string[],
+  ): Promise<{ id: string; name: string | null; surname: string | null }[]> {
+    if (userIds.length === 0) return [];
+    return this.users.find({
+      where: userIds.map((id) => ({ id })),
+      select: { id: true, name: true, surname: true },
+    });
+  }
+
+  /** Sockets do not survive a restart — anyone still flagged online is stale. */
+  async resetAllPresence(): Promise<void> {
+    await this.users
+      .createQueryBuilder()
+      .update()
+      .set({ isOnline: false, lastSeenAt: () => 'COALESCE(last_seen_at, now())' })
+      .where('is_online = true')
+      .execute();
+  }
 }

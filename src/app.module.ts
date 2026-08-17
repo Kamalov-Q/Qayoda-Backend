@@ -11,6 +11,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ListingsModule } from './modules/listings/listings.module';
 import { MediaModule } from './modules/media/media.module';
+import { ChatModule } from './modules/chat/chat.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { MediaModule } from './modules/media/media.module';
     NotificationsModule,
     ListingsModule,
     MediaModule,
+    ChatModule,
   ],
   controllers: [],
   providers: [
