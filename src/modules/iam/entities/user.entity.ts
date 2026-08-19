@@ -22,7 +22,7 @@ export class User {
   @Column({ name: 'avatar_thumb_url', type: 'text', nullable: true })
   avatarThumbUrl: string | null;
 
-  @Column({ name: 'phone_number', length: 20, nullable: true })
+  @Column({ name: 'phone_number', type: 'varchar', length: 20, nullable: true })
   phoneNumber: string | null;
 
   @Column({ length: 16, default: 'user' }) role: 'user' | 'admin';
