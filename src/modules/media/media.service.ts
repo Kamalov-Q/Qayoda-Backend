@@ -37,6 +37,11 @@ export interface ChatAttachment {
   waveform: number[] | null;
 }
 
+export interface ProcessedAvatar {
+  url: string;
+  thumbUrl: string;
+}
+
 @Injectable()
 export class MediaService {
   private readonly logger = new Logger(MediaService.name);
@@ -117,6 +122,47 @@ export class MediaService {
     }
 
     return { images, failed };
+  }
+
+  async processAvatar(buffer: Buffer): Promise<ProcessedAvatar> {
+    let meta: sharp.Metadata;
+
+    try {
+      meta = await sharp(buffer).metadata();
+    } catch {
+      throw new BadRequestException('Uploaded file is not an image');
+    }
+
+    if (!meta.width || !meta.height) {
+      throw new BadRequestException('Unable to determine image dimensions');
+    }
+
+    const id = crypto.randomUUID();
+    const prefix = `avatars/${new Date().toISOString().slice(0, 7)}`;
+    const fullPath = `${prefix}/${id}.jpg`;
+    const thumbPath = `${prefix}/${id}_thumb.jpg`;
+
+    const full = await sharp(buffer)
+      .rotate()
+      .resize(512, 512, { fit: 'cover', position: 'center' })
+      .jpeg({ quality: 85 })
+      .toBuffer();
+
+    const thumb = await sharp(buffer)
+      .rotate()
+      .resize(128, 128, { fit: 'cover', position: 'center' })
+      .jpeg({ quality: 75 })
+      .toBuffer();
+
+    await Promise.all([
+      this.putToBunny(fullPath, full),
+      this.putToBunny(thumbPath, thumb),
+    ]);
+
+    return {
+      url: `${this.cdnUrl}/${fullPath}`,
+      thumbUrl: `${this.cdnUrl}/${thumbPath}`,
+    };
   }
 
   async deleteFromBunny(cdnUrl: string): Promise<void> {
@@ -372,9 +418,7 @@ export class MediaService {
     };
   }
 
-  private probe(
-    filePath: string,
-  ): Promise<{
+  private probe(filePath: string): Promise<{
     durationSec: number | null;
     width: number | null;
     height: number | null;

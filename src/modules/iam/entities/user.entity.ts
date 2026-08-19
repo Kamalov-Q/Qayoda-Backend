@@ -13,10 +13,18 @@ export class User {
   @Index({ unique: true }) @Column({ type: 'citext' }) email: string;
   @Column({ length: 64 }) name: string;
   @Column({ length: 64 }) surname: string;
+
   @Column({ name: 'password_hash', type: 'text', nullable: true })
   passwordHash: string | null;
   @Column({ name: 'avatar_url', type: 'text', nullable: true }) avatarUrl:
     string | null;
+
+  @Column({ name: 'avatar_thumb_url', type: 'text', nullable: true })
+  avatarThumbUrl: string | null;
+
+  @Column({ name: 'phone_number', length: 20, nullable: true })
+  phoneNumber: string | null;
+
   @Column({ length: 16, default: 'user' }) role: 'user' | 'admin';
   @Column({ name: 'is_verified', default: false }) isVerified: boolean;
 

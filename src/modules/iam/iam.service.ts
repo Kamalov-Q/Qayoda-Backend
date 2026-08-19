@@ -11,8 +11,13 @@ import { TokenService } from './token.service';
 import { OutBoxService } from 'src/shared/events/outbox.service';
 import { OtpPurpose } from '../otp/enums/otp-purpose.enum';
 import * as bcrypt from 'bcrypt';
-import { IsNull } from 'typeorm';
+import { DataSource, IsNull } from 'typeorm';
 import { User } from './entities/user.entity';
+import {
+  ProfileResponse,
+  PublicProfileResponse,
+} from './responses/profile.response';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 
 /** One cost factor for every secret this service hashes, so a password set at
  *  registration is not cheaper to crack than one set by a reset. */
@@ -26,6 +31,7 @@ export class IamService {
     private readonly otp: OtpFacade,
     private readonly tokens: TokenService,
     private readonly outbox: OutBoxService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async requestOtp(email: string, purpose: OtpPurpose) {
@@ -288,23 +294,131 @@ export class IamService {
     }));
   }
 
-  async getPublicProfiles(
-    userIds: string[],
-  ): Promise<{ id: string; name: string | null; surname: string | null }[]> {
-    if (userIds.length === 0) return [];
-    return this.users.find({
-      where: userIds.map((id) => ({ id })),
-      select: { id: true, name: true, surname: true },
-    });
-  }
-
   /** Sockets do not survive a restart — anyone still flagged online is stale. */
   async resetAllPresence(): Promise<void> {
     await this.users
       .createQueryBuilder()
       .update()
-      .set({ isOnline: false, lastSeenAt: () => 'COALESCE(last_seen_at, now())' })
+      .set({
+        isOnline: false,
+        lastSeenAt: () => 'COALESCE(last_seen_at, now())',
+      })
       .where('is_online = true')
       .execute();
+  }
+
+  async getProfile(userId: string): Promise<ProfileResponse> {
+    const user = await this.users.findOneBy({ id: userId });
+    if (!user) throw new UnauthorizedException('User not found!');
+    return this.toProfile(user);
+  }
+
+  async updateProfile(
+    userId: string,
+    dto: UpdateProfileDto,
+  ): Promise<ProfileResponse> {
+    const user = await this.users.findOneBy({ id: userId });
+    if (!user) throw new NotFoundException('User not found!');
+
+    const patch: Partial<User> = {};
+    if (dto.name !== undefined) patch.name = dto.name;
+    if (dto.surname !== undefined) patch.surname = dto.surname;
+    if (dto.phoneNumber !== undefined) patch.phoneNumber = dto.phoneNumber;
+
+    if (Object.keys(patch).length > 0) {
+      await this.users.update(userId, patch);
+    }
+
+    return this.getProfile(userId);
+  }
+
+  async setAvatar(
+    userId: string,
+    avatar: { url: string; thumbUrl: string },
+  ): Promise<ProfileResponse> {
+    const user = await this.users.findOneBy({ id: userId });
+    if (!user) throw new NotFoundException('User not found!');
+
+    const orphaned = [user.avatarUrl, user.avatarThumbUrl].filter(
+      (u): u is string => !!u,
+    );
+
+    await this.dataSource.transaction(async (manager) => {
+      await manager.update(User, userId, {
+        avatarUrl: avatar.url,
+        avatarThumbUrl: avatar.thumbUrl,
+      });
+
+      if (orphaned.length) {
+        await this.outbox.publish(
+          'media.files_orphaned',
+          { urls: orphaned },
+          manager,
+        );
+      }
+    });
+
+    return this.getProfile(userId);
+  }
+
+  async removeAvatar(userId: string): Promise<ProfileResponse> {
+    const user = await this.users.findOneBy({ id: userId });
+    if (!user) throw new NotFoundException('User not found!');
+
+    const orphaned = [user.avatarUrl, user.avatarThumbUrl].filter(
+      (u): u is string => !!u,
+    );
+
+    await this.dataSource.transaction(async (manager) => {
+      await manager.update(User, userId, {
+        avatarUrl: null,
+        avatarThumbUrl: null,
+      });
+      if (orphaned.length) {
+        await this.outbox.publish(
+          'media.files_orphaned',
+          { urls: orphaned },
+          manager,
+        );
+      }
+    });
+
+    return this.getProfile(userId);
+  }
+
+  async getPublicProfiles(userIds: string[]): Promise<PublicProfileResponse[]> {
+    if (userIds.length === 0) return [];
+
+    const rows = await this.users.find({
+      where: userIds.map((id) => ({ id })),
+      select: {
+        id: true,
+        name: true,
+        surname: true,
+        avatarThumbUrl: true,
+        phoneNumber: true,
+      },
+    });
+
+    return rows.map((u) => ({
+      id: u.id,
+      name: u.name,
+      surname: u.surname,
+      avatarThumbUrl: u.avatarThumbUrl,
+      phoneNumber: u.phoneNumber,
+    }));
+  }
+
+  private toProfile(user: User): ProfileResponse {
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      surname: user.surname,
+      avatarUrl: user.avatarUrl,
+      avatarThumbUrl: user.avatarThumbUrl,
+      phoneNumber: user.phoneNumber,
+      createdAt: user.createdAt,
+    };
   }
 }

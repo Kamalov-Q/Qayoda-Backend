@@ -3,7 +3,10 @@ import { MessageResponse } from './message.response';
 
 /** The other participant, with presence folded in. */
 export class CounterpartResponse {
-  @ApiProperty({ format: 'uuid', example: '3fa85f64-5717-4562-b3fc-2c963f66afa6' })
+  @ApiProperty({
+    format: 'uuid',
+    example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+  })
   id: string;
 
   @ApiProperty({ type: String, nullable: true, example: 'Ada' })
@@ -13,8 +16,23 @@ export class CounterpartResponse {
   surname?: string | null;
 
   @ApiProperty({
+    type: String,
+    nullable: true,
+    example: 'https://cdn.example.com/avatar/3f1c9d2e.jpg',
+  })
+  avatarThumbUrl?: string | null;
+
+  @ApiProperty({
+    nullable: true,
+    example: '+998901234567',
+    description: 'Denormalised phone number.',
+  })
+  phoneNumber?: string | null;
+
+  @ApiProperty({
     example: true,
-    description: 'Whether they currently hold a socket on the `/chat` namespace.',
+    description:
+      'Whether they currently hold a socket on the `/chat` namespace.',
   })
   online: boolean;
 
@@ -28,10 +46,16 @@ export class CounterpartResponse {
 }
 
 export class ConversationResponse {
-  @ApiProperty({ format: 'uuid', example: '8c2a1b40-5f6d-4c3e-9a7b-1e0d5c4b3a29' })
+  @ApiProperty({
+    format: 'uuid',
+    example: '8c2a1b40-5f6d-4c3e-9a7b-1e0d5c4b3a29',
+  })
   id: string;
 
-  @ApiProperty({ format: 'uuid', example: '3f1c9d2e-8b4a-4a1e-9c7f-2d6b0e5a1f34' })
+  @ApiProperty({
+    format: 'uuid',
+    example: '3f1c9d2e-8b4a-4a1e-9c7f-2d6b0e5a1f34',
+  })
   listingId: string;
 
   @ApiProperty({
