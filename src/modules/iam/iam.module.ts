@@ -32,6 +32,9 @@ import { JwtService } from '@nestjs/jwt';
     JwtRefreshStrategy,
     JwtService,
   ],
-  exports: [IamFacade],
+  // IamService leaves the module for exactly one consumer: ProfileController
+  // lives in MediaModule (it needs MediaFacade for avatar processing) but its
+  // data operations are IAM's.
+  exports: [IamFacade, IamService],
 })
 export class IamModule {}
