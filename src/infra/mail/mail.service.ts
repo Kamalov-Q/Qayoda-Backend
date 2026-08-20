@@ -10,7 +10,7 @@ export class MailService {
    *  `onboarding@resend.dev` is Resend's sandbox sender: no verification, but
    *  it only delivers to the account owner's own address. Good enough to keep
    *  a fresh clone working locally, never right in production. */
-  private from = process.env.MAIL_FROM ?? 'Qayoda <onboarding@resend.dev>';
+  private from = process.env.MAIL_FROM ?? 'uyNest <onboarding@resend.dev>';
 
   async send(params: {
     to: string;

@@ -81,7 +81,6 @@ export class ConversationResponse {
   })
   lastMessagePreview: string | null;
 }
-
 export class ConversationListItemResponse extends ConversationResponse {
   @ApiProperty({
     type: String,

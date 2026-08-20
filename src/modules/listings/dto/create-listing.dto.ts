@@ -7,6 +7,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
   ValidateNested,
@@ -16,6 +17,11 @@ import { OfferPurpose } from '../enums/offer-purpose.enum';
 import { Type } from 'class-transformer';
 import { PropertyCategory } from '../enums/property-category.enum';
 import { ValidPolygon } from '../validators/valid-polygon.validator';
+import {
+  FloorAllowedForCategory,
+  NotAboveTotalFloors,
+} from '../validators/floors.validator';
+import { MAX_FLOORS, MIN_FLOOR } from '../listings.constants';
 import { ApiPolygonCoordinates } from '../decorators/api-polygon-coordinates.decorator';
 import type { PolygonCoordinates } from '../types/geojson.type';
 import { ImageInputDto } from './update-images.dto';
@@ -100,18 +106,37 @@ export class CreateListingDto {
   @ApiPropertyOptional({
     type: 'integer',
     example: 4,
-    description: 'Floor the unit is on. May be negative for basement levels.',
+    minimum: MIN_FLOOR,
+    maximum: MAX_FLOORS,
+    description:
+      'Floor the unit is on. May be negative for basement levels. Accepted only ' +
+      'for the categories that can be stacked (`APARTMENT`, `BUILDING`); omit it ' +
+      'for a single-storey property of any category.',
   })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
+  @Min(MIN_FLOOR)
+  @Max(MAX_FLOORS)
+  @NotAboveTotalFloors()
+  @FloorAllowedForCategory()
   floor?: number;
 
-  @ApiPropertyOptional({ type: 'integer', example: 9, minimum: 0 })
+  @ApiPropertyOptional({
+    type: 'integer',
+    example: 9,
+    minimum: 1,
+    maximum: MAX_FLOORS,
+    description:
+      'Storeys in the building. Same category rule as `floor`, and the two are ' +
+      'independent — a top-floor flat in an unknown-height block may send `floor` alone.',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
-  @Min(0)
+  @Min(1)
+  @Max(MAX_FLOORS)
+  @FloorAllowedForCategory()
   totalFloors?: number;
 
   @ApiPropertyOptional({

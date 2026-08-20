@@ -1,6 +1,6 @@
-# Qayoda API
+# uyNest API
 
-Backend for **Qayoda**, a real-estate marketplace: property listings drawn as map polygons, with OTP-based accounts and real-time chat between buyers and owners.
+Backend for **uyNest**, a real-estate marketplace: property listings drawn as map polygons, with OTP-based accounts and real-time chat between buyers and owners.
 
 Built with [NestJS 11](https://nestjs.com) and TypeScript on PostgreSQL + PostGIS, with Socket.IO for the live layer.
 

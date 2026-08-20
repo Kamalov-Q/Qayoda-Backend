@@ -1,23 +1,23 @@
 services:
   postgres:
     image: postgis/postgis:17-3.5-alpine
-    container_name: qayoda-postgres
+    container_name: uynest-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: qayoda
-      POSTGRES_PASSWORD: qayoda
-      POSTGRES_DB: qayoda
+      POSTGRES_USER: uynest
+      POSTGRES_PASSWORD: uynest
+      POSTGRES_DB: uynest
     ports:
       - '5433:5432'
     volumes:
-      - qayoda-pgdata:/var/lib/postgresql/data
+      - uynest-pgdata:/var/lib/postgresql/data
       - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U qayoda -d qayoda']
+      test: ['CMD-SHELL', 'pg_isready -U uynest -d uynest']
       interval: 5s
       timeout: 5s
       retries: 10
       start_period: 10s
 
 volumes:
-  qayoda-pgdata:
+  uynest-pgdata:

@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ListingRepository } from './repositories/listing.repository';
 import { ListingsGeoService } from './listings-geo.service';
 import { OutBoxService } from 'src/shared/events/outbox.service';
@@ -13,6 +17,7 @@ import { UpdateGeometryDto } from './dto/update-geometry.dto';
 import { ListingImage } from './entities/listing-image.entity';
 import { UpdateImagesDto } from './dto/update-images.dto';
 import { ListingSaveRepository } from './repositories/listing-save.repository';
+import { categoryHasFloors } from './listings.constants';
 
 @Injectable()
 export class ListingsService {
@@ -127,6 +132,8 @@ export class ListingsService {
         ? stripHtml(dto.descriptionHtml)
         : null;
     }
+
+    applyFloors(listing, dto, patch);
 
     await this.listings.update(listing.id, patch);
     return this.findById(listing.id);
@@ -273,6 +280,39 @@ export class ListingsService {
       where: listingIds.map((id) => ({ id })),
       select: { id: true, ownerId: true, title: true, status: true },
     });
+  }
+}
+
+/**
+ * Resolves the floors half of a patch against the row already in the database.
+ *
+ * Two things the DTO cannot see on a partial update:
+ *
+ *  - the category may not be in the body, so `@FloorAllowedForCategory` waves
+ *    the values through. Re-checked here against the effective category — and
+ *    when the category itself is being *moved* out of the floor-capable set
+ *    (a `BUILDING` refiled as a `HOUSE`), the stored floors are cleared rather
+ *    than rejected: they are no longer wrong input, just stale data.
+ *  - `floor` may arrive alone, to be compared against a stored `totalFloors`.
+ */
+function applyFloors(
+  listing: Listing,
+  dto: UpdateListingDto,
+  patch: Partial<Listing>,
+): void {
+  const category = dto.category ?? listing.category;
+
+  if (!categoryHasFloors(category)) {
+    patch.floor = null;
+    patch.totalFloors = null;
+    return;
+  }
+
+  const floor = patch.floor ?? listing.floor;
+  const totalFloors = patch.totalFloors ?? listing.totalFloors;
+
+  if (floor != null && totalFloors != null && floor > totalFloors) {
+    throw new BadRequestException('floor cannot be above totalFloors');
   }
 }
 
