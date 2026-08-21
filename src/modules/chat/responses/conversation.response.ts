@@ -19,6 +19,15 @@ export class CounterpartResponse {
     type: String,
     nullable: true,
     example: 'https://cdn.example.com/avatar/3f1c9d2e.jpg',
+    description: 'Full-size avatar. Prefer this one when it is not null.',
+  })
+  avatarUrl?: string | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    example: 'https://cdn.example.com/avatar/3f1c9d2e_thumb.jpg',
+    description: 'Fallback for when `avatarUrl` is null.',
   })
   avatarThumbUrl?: string | null;
 

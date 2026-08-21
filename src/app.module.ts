@@ -12,6 +12,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ListingsModule } from './modules/listings/listings.module';
 import { MediaModule } from './modules/media/media.module';
 import { ChatModule } from './modules/chat/chat.module';
+import { UsersModule } from './modules/users/users.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { ChatModule } from './modules/chat/chat.module';
     ListingsModule,
     MediaModule,
     ChatModule,
+    UsersModule,
   ],
   controllers: [],
   providers: [

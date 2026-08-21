@@ -16,6 +16,10 @@ export class IamFacade {
     };
   }
 
+  getUserCard(userId: string) {
+    return this.iamService.getUserCard(userId);
+  }
+
   setPresence(userId: string, online: boolean) {
     return this.iamService.setPresence(userId, online);
   }

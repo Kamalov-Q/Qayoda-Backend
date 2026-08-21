@@ -17,6 +17,7 @@ import {
   ProfileResponse,
   PublicProfileResponse,
 } from './responses/profile.response';
+import { UserCardResponse } from './responses/user-card.response';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 
 /** One cost factor for every secret this service hashes, so a password set at
@@ -395,6 +396,7 @@ export class IamService {
         id: true,
         name: true,
         surname: true,
+        avatarUrl: true,
         avatarThumbUrl: true,
         phoneNumber: true,
       },
@@ -404,9 +406,32 @@ export class IamService {
       id: u.id,
       name: u.name,
       surname: u.surname,
+      avatarUrl: u.avatarUrl,
       avatarThumbUrl: u.avatarThumbUrl,
       phoneNumber: u.phoneNumber,
     }));
+  }
+
+  /** The profile card behind an avatar tap — contact details included. */
+  async getUserCard(userId: string): Promise<UserCardResponse> {
+    const user = await this.users.findOneBy({ id: userId });
+    if (!user) throw new NotFoundException('User not found!');
+
+    const fullName = [user.name, user.surname]
+      .filter((part) => !!part?.trim())
+      .join(' ');
+
+    return {
+      id: user.id,
+      fullName: fullName || null,
+      name: user.name,
+      surname: user.surname,
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+      avatarUrl: user.avatarUrl,
+      avatarThumbUrl: user.avatarThumbUrl,
+      createdAt: user.createdAt,
+    };
   }
 
   private toProfile(user: User): ProfileResponse {

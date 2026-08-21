@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource, Repository } from 'typeorm';
 import { Listing } from '../entities/listing.entity';
+import { ListingStatus } from '../enums/listing-status.enum';
 
 @Injectable()
 export class ListingRepository extends Repository<Listing> {
@@ -18,6 +19,15 @@ export class ListingRepository extends Repository<Listing> {
   findMine(ownerId: string) {
     return this.find({
       where: { ownerId },
+      relations: { offers: true, images: true },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  /** Same as `findMine`, minus the drafts and archived rows only the owner may see. */
+  findPublicByOwner(ownerId: string) {
+    return this.find({
+      where: { ownerId, status: ListingStatus.ACTIVE },
       relations: { offers: true, images: true },
       order: { createdAt: 'DESC' },
     });

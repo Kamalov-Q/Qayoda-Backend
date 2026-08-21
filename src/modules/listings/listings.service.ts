@@ -105,6 +105,10 @@ export class ListingsService {
     return this.listings.findMine(ownerId);
   }
 
+  findPublicByOwner(ownerId: string) {
+    return this.listings.findPublicByOwner(ownerId);
+  }
+
   // ---- Saved listings ------------------------------------------------------
 
   /** 404s on a missing listing; saving an existing one twice is a no-op. */

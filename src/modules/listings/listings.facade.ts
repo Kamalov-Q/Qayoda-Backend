@@ -25,6 +25,10 @@ export class ListingsFacade {
     };
   }
 
+  findPublicByOwner(ownerId: string) {
+    return this.listingsService.findPublicByOwner(ownerId);
+  }
+
   async getSummaries(listingIds: string[]) {
     return this.listingsService.getSummaries(listingIds);
   }

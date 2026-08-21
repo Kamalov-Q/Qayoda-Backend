@@ -181,7 +181,12 @@ export class ChatGateway
     const result = await this.chatService.markRead(data.conversationId, userId);
     const otherId = this.chatService.otherPartyOf(conv, userId);
 
+    // Both rooms, and `result.readBy` says which side each one is hearing
+    // about. The other party needs it to tick their own messages over to READ;
+    // the reader needs it to drop the unread badge — including on the reader's
+    // OTHER devices, which is why it is a broadcast and not a plain ack.
     this.server.to(`user:${otherId}`).emit('message:read', result);
+    this.server.to(`user:${userId}`).emit('message:read', result);
   }
 
   @SubscribeMessage('message:edit')
