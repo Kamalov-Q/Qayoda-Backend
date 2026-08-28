@@ -6,7 +6,7 @@ import {
 } from '@nestjs/swagger';
 import { ListingsGeoService } from './listings-geo.service';
 import { MapViewportQueryDto } from './dto/map-viewport.query.dto';
-import { ErrorResponse } from '../iam/responses/error.response';
+import { ErrorResponse } from 'src/shared/responses/error.response';
 import { POLYGON_ZOOM_THRESHOLD } from './listings.constants';
 
 @ApiTags('Listings')

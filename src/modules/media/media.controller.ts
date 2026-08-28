@@ -22,10 +22,10 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { MediaService } from './media.service';
-import { JwtAccessGuard } from '../iam/guards/jwt-access.guard';
+import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
 import { Throttle } from '@nestjs/throttler';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
-import { ErrorResponse } from '../iam/responses/error.response';
+import { ErrorResponse } from 'src/shared/responses/error.response';
 import {
   BatchUploadResponse,
   ChatAttachmentResponse,

@@ -5,7 +5,7 @@ import { Entity, PrimaryColumn, CreateDateColumn, Index } from 'typeorm';
 
 @Entity('listing_saves')
 export class ListingSave {
-  // Plain ids on both sides — never relations across the iam module boundary,
+  // Plain ids on both sides — never relations across the users module boundary,
   // and listings are joined by hand where the saved feed needs them.
   @PrimaryColumn('uuid', { name: 'user_id' }) userId: string;
   @Index() @PrimaryColumn('uuid', { name: 'listing_id' }) listingId: string;

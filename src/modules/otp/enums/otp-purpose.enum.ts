@@ -1,6 +1,0 @@
-export enum OtpPurpose {
-  REGISTER = 'REGISTER',
-  LOGIN = 'LOGIN',
-  CHANGE_EMAIL = 'CHANGE_EMAIL',
-  RESET_PASSWORD = 'RESET_PASSWORD',
-}

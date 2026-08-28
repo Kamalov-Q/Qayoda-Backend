@@ -15,7 +15,7 @@ export class ListingOwnershipGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<ListingRequest>();
     const listingId: string = req.params.id;
-    const userId: string | undefined = req.user?.userId;
+    const userId: string | undefined = req.user?.sub;
 
     const listing = await this.listings.findOneBy({ id: listingId });
     // Checks the LISTING, not the id: `listingId` comes from the route and is

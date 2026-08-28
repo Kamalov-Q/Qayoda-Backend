@@ -4,7 +4,8 @@ import { Conversation } from './entities/conversation.entity';
 import { Message } from './entities/message.entity';
 import { JwtModule } from '@nestjs/jwt';
 import { ListingsModule } from '../listings/listings.module';
-import { IamModule } from '../iam/iam.module';
+import { UsersModule } from '../users/users.module';
+import { AuthModule } from '../auth/auth.module';
 import { ChatController } from './chat.controller';
 import { ConversationRepository } from './repositories/conversation.repository';
 import { MessageRepository } from './repositories/message.repository';
@@ -18,7 +19,8 @@ import { WsJwtGuard } from './guards/ws-jwt.guard';
     TypeOrmModule.forFeature([Conversation, Message]),
     JwtModule.register({}),
     ListingsModule,
-    IamModule,
+    UsersModule,
+    AuthModule,
   ],
   controllers: [ChatController],
   providers: [

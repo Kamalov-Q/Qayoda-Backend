@@ -1,4 +1,4 @@
-import type { AuthenticatedRequest } from 'src/modules/iam/types/auth-user.type';
+import type { AuthenticatedRequest } from 'src/modules/auth/types/auth-user.type';
 import type { Listing } from '../entities/listing.entity';
 
 /**

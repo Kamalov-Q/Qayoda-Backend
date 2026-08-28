@@ -7,7 +7,7 @@ import {
 import { ConversationRepository } from './repositories/conversation.repository';
 import { MessageRepository } from './repositories/message.repository';
 import { ListingsFacade } from '../listings/listings.facade';
-import { IamFacade } from '../iam/iam.facade';
+import { UsersFacade } from '../users/users.facade';
 import { OutBoxService } from 'src/shared/events/outbox.service';
 import { DataSource } from 'typeorm';
 import { SendMessageDto } from './dto/send-message.dto';
@@ -26,7 +26,7 @@ export class ChatService {
     private readonly conversations: ConversationRepository,
     private readonly messages: MessageRepository,
     private readonly listings: ListingsFacade,
-    private readonly iam: IamFacade,
+    private readonly users: UsersFacade,
     private readonly outbox: OutBoxService,
     private readonly dataSource: DataSource,
   ) {}
@@ -118,8 +118,8 @@ export class ChatService {
 
     const [unreadMap, presence, profiles, listings] = await Promise.all([
       this.messages.countUnreadGrouped(convIds, userId),
-      this.iam.getPresence(otherIds),
-      this.iam.getPublicProfiles(otherIds),
+      this.users.getPresence(otherIds),
+      this.users.getPublicProfiles(otherIds),
       this.listings.getSummaries(listingIds),
     ]);
 
@@ -450,8 +450,8 @@ export class ChatService {
     const otherId = this.otherPartyOf(c, userId);
 
     const [profiles, presence] = await Promise.all([
-      this.iam.getPublicProfiles([otherId]),
-      this.iam.getPresence([otherId]),
+      this.users.getPublicProfiles([otherId]),
+      this.users.getPresence([otherId]),
     ]);
 
     return {

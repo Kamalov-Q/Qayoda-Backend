@@ -12,38 +12,53 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
-import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
-import { JwtAccessGuard } from '../iam/guards/jwt-access.guard';
-import { CurrentUser } from '../iam/guards/current-user.decorator';
-import { IamService } from '../iam/iam.service';
-import { UpdateProfileDto } from '../iam/dto/update-profile.dto';
+import {
+  ApiBearerAuth,
+  ApiConsumes,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
+import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import type { AuthUser } from '../auth/types/auth-user.type';
+import { UsersService } from '../users/users.service';
+import { UpdateProfileDto } from '../users/dto/update-profile.dto';
+import { ProfileResponse } from '../users/responses/profile.response';
 import { MediaFacade } from './media.facade';
 
 const AVATAR_MAX_SIZE = 5 * 1024 * 1024;
 
-@ApiTags('profile')
+@ApiTags('Profile')
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAccessGuard)
 @Controller('profile')
 export class ProfileController {
   constructor(
-    private readonly iamService: IamService,
+    private readonly users: UsersService,
     private readonly media: MediaFacade,
   ) {}
 
+  @ApiOperation({ summary: 'Your own profile' })
+  @ApiOkResponse({ type: ProfileResponse })
   @Get()
-  getProfile(@CurrentUser() user: { userId: string }) {
-    return this.iamService.getProfile(user.userId);
+  getProfile(@CurrentUser() user: AuthUser) {
+    return this.users.getProfile(user.sub);
   }
 
+  @ApiOperation({
+    summary: 'Edit your name',
+    description:
+      'Phone and email are not editable: each is written only by the provider that verified it.',
+  })
+  @ApiOkResponse({ type: ProfileResponse })
   @Patch()
-  updateProfile(
-    @CurrentUser() user: { userId: string },
-    @Body() dto: UpdateProfileDto,
-  ) {
-    return this.iamService.updateProfile(user.userId, dto);
+  updateProfile(@CurrentUser() user: AuthUser, @Body() dto: UpdateProfileDto) {
+    return this.users.updateProfile(user.sub, dto);
   }
 
+  @ApiOperation({ summary: 'Replace your avatar' })
+  @ApiOkResponse({ type: ProfileResponse })
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('avatar')
   @ApiConsumes('multipart/form-data')
@@ -51,16 +66,18 @@ export class ProfileController {
     FileInterceptor('file', { limits: { fileSize: AVATAR_MAX_SIZE } }),
   )
   async uploadAvatar(
-    @CurrentUser() user: { userId: string },
+    @CurrentUser() user: AuthUser,
     @UploadedFile() file: Express.Multer.File,
   ) {
     if (!file) throw new BadRequestException('Fayl yuborilmadi');
     const avatar = await this.media.processAvatar(file.buffer);
-    return this.iamService.setAvatar(user.userId, avatar);
+    return this.users.setAvatar(user.sub, avatar);
   }
 
+  @ApiOperation({ summary: 'Remove your avatar' })
+  @ApiOkResponse({ type: ProfileResponse })
   @Delete('avatar')
-  removeAvatar(@CurrentUser() user: { userId: string }) {
-    return this.iamService.removeAvatar(user.userId);
+  removeAvatar(@CurrentUser() user: AuthUser) {
+    return this.users.removeAvatar(user.sub);
   }
 }

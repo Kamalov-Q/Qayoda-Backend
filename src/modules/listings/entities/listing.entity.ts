@@ -18,7 +18,7 @@ import type { GeoJsonPoint, GeoJsonPolygon } from '../types/geojson.type';
 export class Listing {
   @PrimaryGeneratedColumn('uuid') id: string;
 
-  // Plain id — never a relation to iam's User entity (module boundary)
+  // Plain id — never a relation to the users module's User entity
   @Index() @Column({ name: 'owner_id' }) ownerId: string;
 
   @Column({ type: 'enum', enum: PropertyCategory }) category: PropertyCategory;

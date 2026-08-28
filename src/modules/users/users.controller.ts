@@ -14,8 +14,8 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { JwtAccessGuard } from '../iam/guards/jwt-access.guard';
-import { ErrorResponse } from '../iam/responses/error.response';
+import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
+import { ErrorResponse } from 'src/shared/responses/error.response';
 import { UsersService } from './users.service';
 import { UserProfileResponse } from './responses/public-user.response';
 

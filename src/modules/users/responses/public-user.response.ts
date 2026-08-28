@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { UserCardResponse } from 'src/modules/iam/responses/user-card.response';
+import { UserCardResponse } from './user-card.response';
 
 export class UserProfileResponse extends UserCardResponse {
   @ApiProperty({

@@ -22,15 +22,15 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { ListingsService } from './listings.service';
-import { JwtAccessGuard } from '../iam/guards/jwt-access.guard';
-import { CurrentUser } from '../iam/guards/current-user.decorator';
+import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { CreateListingDto } from './dto/create-listing.dto';
 import { ListingOwnershipGuard } from './guards/listing-ownership.guard';
 import { UpdateOffersDto } from './dto/update-offers.dto';
 import { UpdateGeometryDto } from './dto/update-geometry.dto';
-import { ErrorResponse } from '../iam/responses/error.response';
+import { ErrorResponse } from 'src/shared/responses/error.response';
 import type { ListingRequest } from './types/listing-request.type';
-import type { AuthUser } from 'src/modules/iam/types/auth-user.type';
+import type { AuthUser } from 'src/modules/auth/types/auth-user.type';
 import { UpdateImagesDto } from './dto/update-images.dto';
 
 // `type` has to be stated: the guarded routes take the request via @Req(), so
@@ -75,7 +75,7 @@ export class ListingsController {
   @UseGuards(JwtAccessGuard)
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateListingDto) {
-    return this.listingsService.create(user.userId, dto);
+    return this.listingsService.create(user.sub, dto);
   }
 
   @ApiOperation({
@@ -90,7 +90,7 @@ export class ListingsController {
   // `mine` would otherwise be read as a listing id and rejected by ParseUUIDPipe.
   @Get('mine')
   findMine(@CurrentUser() user: AuthUser) {
-    return this.listingsService.findMine(user.userId);
+    return this.listingsService.findMine(user.sub);
   }
 
   @ApiOperation({
@@ -104,7 +104,7 @@ export class ListingsController {
   // Same declaration-order rule as `mine`: must sit above `:id`.
   @Get('saved')
   findSaved(@CurrentUser() user: AuthUser) {
-    return this.listingsService.findSaved(user.userId);
+    return this.listingsService.findSaved(user.sub);
   }
 
   @ApiOperation({
@@ -122,7 +122,7 @@ export class ListingsController {
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.listingsService.saveListing(user.userId, id);
+    return this.listingsService.saveListing(user.sub, id);
   }
 
   @ApiOperation({
@@ -139,7 +139,7 @@ export class ListingsController {
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.listingsService.unsaveListing(user.userId, id);
+    return this.listingsService.unsaveListing(user.sub, id);
   }
 
   @ApiOperation({

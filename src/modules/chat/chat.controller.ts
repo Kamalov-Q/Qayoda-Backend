@@ -22,14 +22,14 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { JwtAccessGuard } from '../iam/guards/jwt-access.guard';
-import { CurrentUser } from '../iam/guards/current-user.decorator';
+import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ChatService } from './chat.service';
 import { StartConversationDto } from './dto/start-conversation.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 import { EditMessageDto } from './dto/edit-message.dto';
 import { ListMessagesQueryDto } from './dto/list-messages.query.dto';
-import { ErrorResponse } from '../iam/responses/error.response';
+import { ErrorResponse } from 'src/shared/responses/error.response';
 import {
   ConversationListItemResponse,
   ConversationResponse,
@@ -43,7 +43,7 @@ import {
   DeletedMessageResponse,
   ReadReceiptResponse,
 } from './responses/receipt.response';
-import type { AuthUser } from '../iam/types/auth-user.type';
+import type { AuthUser } from '../auth/types/auth-user.type';
 
 const CONVERSATION_ID_PARAM = {
   name: 'id',
@@ -93,7 +93,7 @@ export class ChatController {
   @ApiOkResponse({ type: [ConversationListItemResponse] })
   @Get('conversations')
   listConversations(@CurrentUser() user: AuthUser) {
-    return this.chatService.listConversations(user.userId);
+    return this.chatService.listConversations(user.sub);
   }
 
   @ApiOperation({
@@ -122,7 +122,7 @@ export class ChatController {
   @Post('conversations')
   start(@CurrentUser() user: AuthUser, @Body() dto: StartConversationDto) {
     return this.chatService.startConversation(
-      user.userId,
+      user.sub,
       dto.listingId,
       dto.message,
     );
@@ -142,7 +142,7 @@ export class ChatController {
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.chatService.getConversation(id, user.userId);
+    return this.chatService.getConversation(id, user.sub);
   }
 
   @ApiOperation({
@@ -167,7 +167,7 @@ export class ChatController {
   ) {
     return this.chatService.listMessages(
       id,
-      user.userId,
+      user.sub,
       query.limit ?? 30,
       query.before,
     );
@@ -198,7 +198,7 @@ export class ChatController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: SendMessageDto,
   ) {
-    return this.chatService.sendMessage(id, user.userId, dto);
+    return this.chatService.sendMessage(id, user.sub, dto);
   }
 
   @ApiOperation({
@@ -218,7 +218,7 @@ export class ChatController {
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.chatService.markRead(id, user.userId);
+    return this.chatService.markRead(id, user.sub);
   }
 
   @ApiOperation({
@@ -250,7 +250,7 @@ export class ChatController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: EditMessageDto,
   ) {
-    return this.chatService.editMessage(id, user.userId, dto.body);
+    return this.chatService.editMessage(id, user.sub, dto.body);
   }
 
   @ApiOperation({
@@ -276,6 +276,6 @@ export class ChatController {
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.chatService.deleteMessage(id, user.userId);
+    return this.chatService.deleteMessage(id, user.sub);
   }
 }

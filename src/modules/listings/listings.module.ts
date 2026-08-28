@@ -16,6 +16,7 @@ import { ListingsGeoService } from './listings-geo.service';
 import { ListingsFacade } from './listings.facade';
 import { ListingOwnershipGuard } from './guards/listing-ownership.guard';
 import { ProjectMapPointListener } from './listeners/project-map-point.listener';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { ProjectMapPointListener } from './listeners/project-map-point.listener'
       ListingMapPoint,
       ListingSave,
     ]),
+    AuthModule,
   ],
   controllers: [ListingsMapController, ListingsController],
   providers: [

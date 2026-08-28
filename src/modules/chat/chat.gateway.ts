@@ -18,7 +18,7 @@ import { Server } from 'socket.io';
 import type { ChatSocket } from './types/chat-socket';
 import { ChatService } from './chat.service';
 import { ConversationRepository } from './repositories/conversation.repository';
-import { IamFacade } from '../iam/iam.facade';
+import { UsersFacade } from '../users/users.facade';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { WsJwtGuard } from './guards/ws-jwt.guard';
@@ -50,13 +50,13 @@ export class ChatGateway
   constructor(
     private readonly chatService: ChatService,
     private readonly conversations: ConversationRepository,
-    private readonly iam: IamFacade,
+    private readonly users: UsersFacade,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
   ) {}
 
   async onModuleInit() {
-    await this.iam.resetAllPresence();
+    await this.users.resetAllPresence();
   }
 
   // ============ lifecycle ============
@@ -87,7 +87,7 @@ export class ChatGateway
     this.sockets.set(userId, next);
 
     if (next === 1) {
-      await this.iam.setPresence(userId, true);
+      await this.users.setPresence(userId, true);
       await this.emitPresenceToCounterparts(userId, {
         userId,
         online: true,
@@ -106,7 +106,7 @@ export class ChatGateway
 
     if (next <= 0) {
       this.sockets.delete(userId);
-      await this.iam.setPresence(userId, false);
+      await this.users.setPresence(userId, false);
       await this.emitPresenceToCounterparts(userId, {
         userId,
         online: false,
@@ -256,6 +256,6 @@ export class ChatGateway
 
   @SubscribeMessage('presence:check')
   onPresenceCheck(@MessageBody() data: WsPresenceCheckDto) {
-    return this.iam.getPresence(data.userIds);
+    return this.users.getPresence(data.userIds);
   }
 }
