@@ -24,6 +24,16 @@ export class ListingRepository extends Repository<Listing> {
     });
   }
 
+  /** The freshest ACTIVE listings, for the Home screen strip. */
+  findLatest(limit: number) {
+    return this.find({
+      where: { status: ListingStatus.ACTIVE },
+      relations: { offers: true, images: true },
+      order: { publishedAt: 'DESC' },
+      take: limit,
+    });
+  }
+
   /** Same as `findMine`, minus the drafts and archived rows only the owner may see. */
   findPublicByOwner(ownerId: string) {
     return this.find({

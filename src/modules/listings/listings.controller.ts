@@ -1,13 +1,16 @@
 import {
   Body,
   Controller,
+  DefaultValuePipe,
   Delete,
   Get,
   Param,
+  ParseIntPipe,
   ParseUUIDPipe,
   Patch,
   Post,
   Put,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -88,6 +91,19 @@ export class ListingsController {
   @UseGuards(JwtAccessGuard)
   // Must stay declared above `:id` — routes match in declaration order, and
   // `mine` would otherwise be read as a listing id and rejected by ParseUUIDPipe.
+  @ApiOperation({
+    summary: 'Newest active listings',
+    description:
+      'The freshest ACTIVE listings, newest first — powers the Home screen strip. Public. `limit` defaults to 10, capped at 30.',
+  })
+  // Same declaration-order rule as `mine`: must sit above `:id`.
+  @Get('latest')
+  findLatest(
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+  ) {
+    return this.listingsService.findLatest(limit);
+  }
+
   @Get('mine')
   findMine(@CurrentUser() user: AuthUser) {
     return this.listingsService.findMine(user.sub);

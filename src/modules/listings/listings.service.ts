@@ -105,6 +105,11 @@ export class ListingsService {
     return this.listings.findMine(ownerId);
   }
 
+  /** Clamped so a crafted limit cannot pull the whole table. */
+  findLatest(limit: number) {
+    return this.listings.findLatest(Math.min(Math.max(limit, 1), 30));
+  }
+
   findPublicByOwner(ownerId: string) {
     return this.listings.findPublicByOwner(ownerId);
   }

@@ -13,7 +13,9 @@ import {
 const stripSeparators = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.replace(/[\s()-]/g, '') : value;
 
-const PHONE = /^(\+?998)?\d{9}$/;
+// 9 digits behind an in-service operator prefix (20/33/50/55/77/88/90–99) —
+// mirrors src/lib/phone.ts in the mobile app, so client and server agree.
+const PHONE = /^(\+?998)?(20|33|50|55|77|88|9\d)\d{7}$/;
 const PHONE_MESSAGE = "Telefon raqami noto'g'ri";
 
 class LocalizedDto {

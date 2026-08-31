@@ -99,8 +99,18 @@ export class EskizService {
    */
   static normalizePhone(input: string): string {
     const digits = input.replace(/\D/g, '');
-    if (digits.length === 9) return `998${digits}`;
-    if (digits.length === 12 && digits.startsWith('998')) return digits;
+    const local =
+      digits.length === 9
+        ? digits
+        : digits.length === 12 && digits.startsWith('998')
+          ? digits.slice(3)
+          : null;
+    // Same operator rule as the DTOs: 9 digits behind a prefix that is
+    // actually in service. An SMS to a number that cannot exist still costs
+    // money, so this is a balance guard as much as validation.
+    if (local && /^(20|33|50|55|77|88|9\d)\d{7}$/.test(local)) {
+      return `998${local}`;
+    }
     // A user-supplied value, so this has to surface as a 400. A plain Error
     // here reached the client as a 500 and read as an outage on our side.
     throw new BadRequestException({
