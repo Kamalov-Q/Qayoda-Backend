@@ -83,16 +83,6 @@ export class ListingsController {
   }
 
   @ApiOperation({
-    summary: 'List your own listings',
-    description:
-      'Returns every listing owned by the caller, in any status — drafts and archived ones included.',
-  })
-  @ApiUnauthorizedResponse({ type: ErrorResponse })
-  @ApiBearerAuth('access-token')
-  @UseGuards(JwtAccessGuard)
-  // Must stay declared above `:id` — routes match in declaration order, and
-  // `mine` would otherwise be read as a listing id and rejected by ParseUUIDPipe.
-  @ApiOperation({
     summary: 'Browse listings',
     description: [
       'The feed behind the list and grid views — every ACTIVE listing, not just the map viewport. Public.',
@@ -118,6 +108,16 @@ export class ListingsController {
     return this.listingsService.findLatest(limit);
   }
 
+  @ApiOperation({
+    summary: 'List your own listings',
+    description:
+      'Returns every listing owned by the caller, in any status — drafts and archived ones included.',
+  })
+  @ApiUnauthorizedResponse({ type: ErrorResponse })
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAccessGuard)
+  // Must stay declared above `:id` — routes match in declaration order, and
+  // `mine` would otherwise be read as a listing id and rejected by ParseUUIDPipe.
   @Get('mine')
   findMine(@CurrentUser() user: AuthUser) {
     return this.listingsService.findMine(user.sub);

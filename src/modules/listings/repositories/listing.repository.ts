@@ -63,8 +63,16 @@ export class ListingRepository extends Repository<Listing> {
       });
     }
 
-    if (q.sort === 'newest') qb.orderBy('l.publishedAt', 'DESC');
-    else qb.orderBy('match.price', q.sort === 'priceAsc' ? 'ASC' : 'DESC');
+    if (q.sort === 'newest') {
+      qb.orderBy('l.publishedAt', 'DESC');
+    } else {
+      // skip/take wraps the query in a DISTINCT-ids subquery, and Postgres
+      // refuses to ORDER BY a joined column that subquery does not select —
+      // "column distinctAlias.match_price does not exist". Selecting it under
+      // the exact alias TypeORM will reference makes the wrapper legal.
+      qb.addSelect('match.price', 'match_price');
+      qb.orderBy('match.price', q.sort === 'priceAsc' ? 'ASC' : 'DESC');
+    }
 
     return qb.skip(q.offset).take(q.limit).getMany();
   }
