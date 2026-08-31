@@ -168,6 +168,21 @@ export class PhoneAuthService {
   }
 
   /**
+   * The welcome screen's router: does this number sign in with a password?
+   * `false` covers BOTH "no account" and "account without a password" — the
+   * two are indistinguishable from outside, so the response reveals nothing
+   * about whether a number is registered; both cases continue by SMS code.
+   */
+  async checkPhone(rawPhone: string) {
+    const phone = EskizService.normalizePhone(rawPhone);
+    const user = await this.ds.getRepository(User).findOne({
+      where: { phoneNumber: `+${phone}` },
+      select: { id: true, passwordHash: true },
+    });
+    return { usePassword: !!user?.passwordHash };
+  }
+
+  /**
    * Returning-user path: phone + password, no SMS spent. The two failure
    * modes stay distinguishable on purpose — PASSWORD_NOT_SET sends the client
    * back to the OTP flow, while INVALID_CREDENTIALS deliberately does not say

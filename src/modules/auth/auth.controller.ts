@@ -27,6 +27,7 @@ import { TelegramAuthService } from './services/telegram-auth.service';
 import { IdentityService } from './services/identity.service';
 import { TokenService } from './services/token.service';
 import {
+  CheckPhoneDto,
   GoogleSignInDto,
   PhoneLoginDto,
   RefreshDto,
@@ -78,6 +79,21 @@ export class AuthController {
   @HttpCode(200)
   verifyOtp(@Body() dto: VerifyOtpDto) {
     return this.phone.verifyOtp(dto.phone, dto.code, dto.name, dto.lang);
+  }
+
+  @ApiOperation({
+    summary: 'How does this number sign in?',
+    description: [
+      'The welcome screen calls this before showing anything else. `usePassword: true` → show the password field; `false` → request an SMS code.',
+      '',
+      '`false` covers both "no account" and "account without a password", so the answer does not reveal whether a number is registered.',
+    ].join('\n'),
+  })
+  @Post('phone/check')
+  @Throttle({ default: { limit: 20, ttl: 600_000 } })
+  @HttpCode(200)
+  checkPhone(@Body() dto: CheckPhoneDto) {
+    return this.phone.checkPhone(dto.phone);
   }
 
   @ApiOperation({

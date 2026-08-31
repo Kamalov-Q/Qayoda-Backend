@@ -58,6 +58,13 @@ export class VerifyOtpDto extends LocalizedDto {
   name?: string;
 }
 
+export class CheckPhoneDto {
+  @ApiProperty({ example: '+998901234567' })
+  @Transform(stripSeparators)
+  @Matches(PHONE, { message: PHONE_MESSAGE })
+  phone: string;
+}
+
 export class PhoneLoginDto {
   @ApiProperty({ example: '+998901234567' })
   @Transform(stripSeparators)
