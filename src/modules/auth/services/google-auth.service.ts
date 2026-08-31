@@ -69,7 +69,10 @@ export class GoogleAuthService {
       // Auto-link only when Google confirms the address — an unverified email
       // on a Google account proves nothing.
       verifiedEmail: p.email_verified ? (p.email ?? null) : null,
-      name: p.name ?? null,
+      // given/family, not the joined display name — they map onto the
+      // profile's name + surname and spare a Google user the onboarding form.
+      name: p.given_name ?? p.name ?? null,
+      surname: p.family_name ?? null,
       avatarUrl: p.picture ?? null,
       language: lang,
       profile: { email: p.email, locale: p.locale },
@@ -88,7 +91,8 @@ export class GoogleAuthService {
       provider: AuthProvider.GOOGLE,
       providerId: p.sub,
       verifiedEmail: p.email_verified ? (p.email ?? null) : null,
-      name: p.name ?? null,
+      name: p.given_name ?? p.name ?? null,
+      surname: p.family_name ?? null,
       avatarUrl: p.picture ?? null,
       profile: { email: p.email },
     });

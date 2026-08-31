@@ -20,6 +20,7 @@ export interface IdentityInput {
   verifiedEmail?: string | null;
   verifiedPhone?: string | null;
   name?: string | null;
+  surname?: string | null;
   avatarUrl?: string | null;
   language?: 'uz' | 'ru';
 }
@@ -100,6 +101,7 @@ export class IdentityService {
     const user = await m.save(
       m.create(User, {
         name: input.name ?? null,
+        surname: input.surname ?? null,
         phoneNumber: input.verifiedPhone ? `+${input.verifiedPhone}` : null,
         email: input.verifiedEmail ?? null,
         avatarUrl: input.avatarUrl ?? null,
@@ -146,6 +148,10 @@ export class IdentityService {
     let dirty = false;
     if (!user.name && input.name) {
       user.name = input.name;
+      dirty = true;
+    }
+    if (!user.surname && input.surname) {
+      user.surname = input.surname;
       dirty = true;
     }
     if (!user.avatarUrl && input.avatarUrl) {

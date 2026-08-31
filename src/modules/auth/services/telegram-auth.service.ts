@@ -116,7 +116,11 @@ export class TelegramAuthService {
     }
 
     const p = session.telegramProfile ?? {};
-    const name = [p.first_name, p.last_name].filter(Boolean).join(' ') || null;
+    // Kept separate, not joined: the profile model has name + surname, and
+    // the onboarding screen only waves a user through without typing when
+    // both arrived from the provider.
+    const name = (p.first_name as string | undefined)?.trim() || null;
+    const surname = (p.last_name as string | undefined)?.trim() || null;
 
     if (session.linkUserId) {
       await this.identities.link(session.linkUserId, {
@@ -135,6 +139,7 @@ export class TelegramAuthService {
       provider: AuthProvider.TELEGRAM,
       providerId: session.telegramId,
       name,
+      surname,
       language: p.language_code === 'ru' ? 'ru' : 'uz',
       profile: p,
     });
