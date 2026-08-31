@@ -15,7 +15,7 @@ Built with [NestJS 11](https://nestjs.com) and TypeScript on PostgreSQL + PostGI
 | **Listings** | [`src/modules/listings`](src/modules/listings) | Properties, offers, images, saves, and PostGIS geometry — including viewport queries for the map. |
 | **Media** | [`src/modules/media`](src/modules/media) | Image and attachment processing (sharp, ffmpeg), uploaded to Bunny CDN storage. |
 | **Chat** | [`src/modules/chat`](src/modules/chat) | Conversations and messages over REST *and* a Socket.IO gateway: delivery/read receipts, typing, presence. |
-| **Notifications** | [`src/modules/notifications`](src/modules/notifications) | Event listeners that deliver mail (Resend). |
+| **Notifications** | [`src/modules/notifications`](src/modules/notifications) | Outbound SMS (Eskiz): login codes and the daily balance check. |
 
 Cross-cutting pieces live in [`src/shared`](src/shared): TypeORM setup, the transactional outbox, and the throttler config.
 
@@ -63,8 +63,6 @@ The server listens on `PORT` (default `3000`) and prints its Swagger URL on boot
 | `JWT_ACCESS_SECRET` | yes | Signs the 15-minute access token. Also verifies the socket handshake. |
 | `JWT_REFRESH_SECRET` | yes | Signs refresh tokens, which rotate on every use. |
 | `JWT_VERIFICATION_SECRET` | yes | Signs the short-lived token handed out after an OTP is verified. |
-| `RESEND_API_KEY` | yes | Resend API key for outbound mail. |
-| `MAIL_FROM` | yes | Sender address on a domain verified in Resend. |
 | `BUNNY_STORAGE_ZONE` | yes | Bunny storage zone name. |
 | `BUNNY_STORAGE_KEY` | yes | Bunny storage password. |
 | `BUNNY_CDN_URL` | yes | Public CDN base URL, no trailing slash. |
