@@ -46,7 +46,10 @@ export class ListingsService {
             ? stripHtml(dto.descriptionHtml)
             : null,
           rooms: dto.rooms ?? null,
-          areaM2: dto.areaM2 ?? null,
+          // Derived, never client-supplied: the drawn boundary IS the area.
+          // Computed from the geography column right below, in the same
+          // transaction; stays null for listings posted without a polygon.
+          areaM2: null,
           floor: dto.floor ?? null,
           totalFloors: dto.totalFloors ?? null,
           address: dto.address ?? null,
@@ -58,7 +61,10 @@ export class ListingsService {
       );
 
       await manager.query(
-        `UPDATE listings SET centroid = ST_Centroid(geom::geometry)::geography WHERE id = $1`,
+        `UPDATE listings
+         SET centroid = ST_Centroid(geom::geometry)::geography,
+             area_m2  = ROUND(ST_Area(geom)::numeric, 1)
+         WHERE id = $1`,
         [listing.id],
       );
 
@@ -103,6 +109,19 @@ export class ListingsService {
 
   findMine(ownerId: string) {
     return this.listings.findMine(ownerId);
+  }
+
+  findFeed(dto: import('./dto/list-listings.dto').ListListingsDto) {
+    return this.listings.findFeed({
+      purpose: dto.purpose,
+      category: dto.category,
+      priceMin: dto.priceMin,
+      priceMax: dto.priceMax,
+      search: dto.q?.trim() || undefined,
+      sort: dto.sort ?? 'newest',
+      limit: Math.min(dto.limit ?? 20, 50),
+      offset: dto.offset ?? 0,
+    });
   }
 
   /** Clamped so a crafted limit cannot pull the whole table. */
@@ -215,6 +234,8 @@ export class ListingsService {
         `UPDATE listings
          SET geom     = ST_SetSRID(ST_GeomFromGeoJSON($1), 4326)::geography,
              centroid = ST_Centroid(ST_SetSRID(ST_GeomFromGeoJSON($1), 4326))::geography,
+             -- The area follows the boundary, always — it is not editable.
+             area_m2  = ROUND(ST_Area(ST_SetSRID(ST_GeomFromGeoJSON($1), 4326)::geography)::numeric, 1),
              updated_at = now()
          WHERE id = $2`,
         [JSON.stringify(geom), listing.id],

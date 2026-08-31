@@ -93,17 +93,6 @@ export class CreateListingDto {
   rooms?: number;
 
   @ApiPropertyOptional({
-    example: 78.5,
-    minimum: 0,
-    description: 'Floor area in square metres.',
-  })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  areaM2?: number;
-
-  @ApiPropertyOptional({
     type: 'integer',
     example: 4,
     minimum: MIN_FLOOR,

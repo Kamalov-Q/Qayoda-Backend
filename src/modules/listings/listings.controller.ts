@@ -31,6 +31,7 @@ import { CreateListingDto } from './dto/create-listing.dto';
 import { ListingOwnershipGuard } from './guards/listing-ownership.guard';
 import { UpdateOffersDto } from './dto/update-offers.dto';
 import { UpdateGeometryDto } from './dto/update-geometry.dto';
+import { ListListingsDto } from './dto/list-listings.dto';
 import { ErrorResponse } from 'src/shared/responses/error.response';
 import type { ListingRequest } from './types/listing-request.type';
 import type { AuthUser } from 'src/modules/auth/types/auth-user.type';
@@ -91,6 +92,19 @@ export class ListingsController {
   @UseGuards(JwtAccessGuard)
   // Must stay declared above `:id` — routes match in declaration order, and
   // `mine` would otherwise be read as a listing id and rejected by ParseUUIDPipe.
+  @ApiOperation({
+    summary: 'Browse listings',
+    description: [
+      'The feed behind the list and grid views — every ACTIVE listing, not just the map viewport. Public.',
+      '',
+      'Filter by purpose (required), category and price; `q` searches title and address; `sort` is newest (default) or price. Paged with `limit` (max 50) and `offset`.',
+    ].join('\n'),
+  })
+  @Get()
+  findFeed(@Query() dto: ListListingsDto) {
+    return this.listingsService.findFeed(dto);
+  }
+
   @ApiOperation({
     summary: 'Newest active listings',
     description:

@@ -24,6 +24,51 @@ export class ListingRepository extends Repository<Listing> {
     });
   }
 
+  /**
+   * The browsable feed: every ACTIVE listing, filtered and paged. Search goes
+   * through title and address — the two fields people actually type.
+   */
+  findFeed(q: {
+    purpose: string;
+    category?: string;
+    priceMin?: number;
+    priceMax?: number;
+    search?: string;
+    sort: 'newest' | 'priceAsc' | 'priceDesc';
+    limit: number;
+    offset: number;
+  }) {
+    const qb = this.createQueryBuilder('l')
+      .leftJoinAndSelect('l.offers', 'offer')
+      .leftJoinAndSelect('l.images', 'image')
+      // The purpose/price filter must run on its own join, or the joined-in
+      // `offer` rows themselves get filtered and rent prices vanish from
+      // cards on the SALE feed.
+      .innerJoin(
+        'l.offers',
+        'match',
+        'match.purpose = :purpose AND match.isActive = true',
+        { purpose: q.purpose },
+      )
+      .where('l.status = :status', { status: ListingStatus.ACTIVE });
+
+    if (q.category) qb.andWhere('l.category = :category', { category: q.category });
+    if (q.priceMin !== undefined)
+      qb.andWhere('match.price >= :priceMin', { priceMin: q.priceMin });
+    if (q.priceMax !== undefined)
+      qb.andWhere('match.price <= :priceMax', { priceMax: q.priceMax });
+    if (q.search) {
+      qb.andWhere('(l.title ILIKE :search OR l.address ILIKE :search)', {
+        search: `%${q.search.replace(/[\\%_]/g, '\\$&')}%`,
+      });
+    }
+
+    if (q.sort === 'newest') qb.orderBy('l.publishedAt', 'DESC');
+    else qb.orderBy('match.price', q.sort === 'priceAsc' ? 'ASC' : 'DESC');
+
+    return qb.skip(q.offset).take(q.limit).getMany();
+  }
+
   /** The freshest ACTIVE listings, for the Home screen strip. */
   findLatest(limit: number) {
     return this.find({
