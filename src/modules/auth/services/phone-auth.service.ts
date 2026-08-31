@@ -3,6 +3,7 @@ import {
   HttpException,
   Injectable,
   Logger,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -11,6 +12,7 @@ import { DataSource, IsNull, LessThan, MoreThan, Repository } from 'typeorm';
 import { randomInt } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { AuthProvider, UserStatus } from 'src/shared/enums';
+import { User } from 'src/modules/users/entities/user.entity';
 import { PhoneOtpCode } from '../entities/phone-otp-code.entity';
 import { EskizService } from '../../notifications/eskiz.service';
 import { IdentityService } from './identity.service';
@@ -85,13 +87,15 @@ export class PhoneAuthService {
       }),
     );
 
-    // A returning user's stored language beats the device locale.
+    // The language the device asked in wins: the user reading this SMS is the
+    // one who just picked RU/UZ on the login screen. The stored profile
+    // language is only the fallback for clients that send none.
     const [existing] = await this.ds.query<{ language: 'uz' | 'ru' }[]>(
       `SELECT language FROM users WHERE phone_number = $1 AND deleted_at IS NULL`,
       [`+${phone}`],
     );
 
-    await this.eskiz.sendOtp(phone, code, existing?.language ?? lang);
+    await this.eskiz.sendOtp(phone, code, lang ?? existing?.language ?? 'uz');
 
     return { sent: true, expiresIn: OTP_TTL_MS / 1000 };
   }
@@ -103,12 +107,34 @@ export class PhoneAuthService {
     lang: 'uz' | 'ru' = 'uz',
   ) {
     const phone = EskizService.normalizePhone(rawPhone);
+    await this.consumeCode(phone, code);
 
-    // Deliberately not wrapped in a transaction. The attempt counter is the
-    // only thing standing between a 6-digit code and a brute force, and an
-    // increment written inside a transaction that then throws is rolled back
-    // with it — the counter never moved and the code never locked. Each
-    // statement below is atomic on its own, which is all this needs.
+    const { user, isNew } = await this.identities.resolve({
+      provider: AuthProvider.PHONE,
+      providerId: phone,
+      verifiedPhone: phone, // OTP proves ownership → safe to auto-link
+      name: name ?? null,
+      language: lang,
+    });
+
+    if (user.status === UserStatus.BANNED) {
+      throw new ForbiddenException({ code: 'ACCOUNT_BANNED' });
+    }
+
+    return { ...(await this.tokens.issuePair(user)), isNew };
+  }
+
+  /**
+   * Validates and burns an outstanding code for this phone. Shared by login
+   * and password reset, so both spend from the same attempt budget.
+   *
+   * Deliberately not wrapped in a transaction. The attempt counter is the
+   * only thing standing between a 6-digit code and a brute force, and an
+   * increment written inside a transaction that then throws is rolled back
+   * with it — the counter never moved and the code never locked. Each
+   * statement below is atomic on its own, which is all this needs.
+   */
+  private async consumeCode(phone: string, code: string): Promise<void> {
     const row = await this.otps.findOne({
       where: { phone, consumedAt: IsNull() },
       order: { createdAt: 'DESC' },
@@ -139,20 +165,71 @@ export class PhoneAuthService {
     if (claimed.affected !== 1) {
       throw new UnauthorizedException({ code: 'OTP_INVALID' });
     }
+  }
 
-    const { user, isNew } = await this.identities.resolve({
-      provider: AuthProvider.PHONE,
-      providerId: phone,
-      verifiedPhone: phone, // OTP proves ownership → safe to auto-link
-      name: name ?? null,
-      language: lang,
+  /**
+   * Returning-user path: phone + password, no SMS spent. The two failure
+   * modes stay distinguishable on purpose — PASSWORD_NOT_SET sends the client
+   * back to the OTP flow, while INVALID_CREDENTIALS deliberately does not say
+   * whether the account exists.
+   */
+  async loginWithPassword(rawPhone: string, password: string) {
+    const phone = EskizService.normalizePhone(rawPhone);
+    const user = await this.ds.getRepository(User).findOne({
+      where: { phoneNumber: `+${phone}` },
     });
 
+    if (!user) {
+      throw new UnauthorizedException({ code: 'INVALID_CREDENTIALS' });
+    }
+    if (!user.passwordHash) {
+      throw new UnauthorizedException({ code: 'PASSWORD_NOT_SET' });
+    }
+    if (!(await bcrypt.compare(password, user.passwordHash))) {
+      throw new UnauthorizedException({ code: 'INVALID_CREDENTIALS' });
+    }
     if (user.status === UserStatus.BANNED) {
       throw new ForbiddenException({ code: 'ACCOUNT_BANNED' });
     }
 
-    return { ...(await this.tokens.issuePair(user)), isNew };
+    return { ...(await this.tokens.issuePair(user)), isNew: false };
+  }
+
+  /** Called by the signed-in user — right after onboarding, or from settings. */
+  async setPassword(userId: string, password: string) {
+    await this.ds
+      .getRepository(User)
+      .update({ id: userId }, { passwordHash: await bcrypt.hash(password, 10) });
+    return { set: true };
+  }
+
+  /**
+   * Forgot-password: an SMS code proves the phone, then the password is
+   * replaced. Every refresh token is revoked — whoever held the old password
+   * is signed out everywhere — and a fresh session is returned so the person
+   * resetting lands straight in the app.
+   */
+  async resetPassword(rawPhone: string, code: string, password: string) {
+    const phone = EskizService.normalizePhone(rawPhone);
+    await this.consumeCode(phone, code);
+
+    const user = await this.ds.getRepository(User).findOne({
+      where: { phoneNumber: `+${phone}` },
+    });
+    // Only revealed AFTER the code passed — the caller has proven they hold
+    // the phone, so telling them there is no account leaks nothing.
+    if (!user) {
+      throw new NotFoundException({ code: 'ACCOUNT_NOT_FOUND' });
+    }
+    if (user.status === UserStatus.BANNED) {
+      throw new ForbiddenException({ code: 'ACCOUNT_BANNED' });
+    }
+
+    user.passwordHash = await bcrypt.hash(password, 10);
+    await this.ds.getRepository(User).save(user);
+    await this.tokens.revokeAllFor(user.id);
+
+    return { ...(await this.tokens.issuePair(user)), isNew: false };
   }
 
   /** Consumed and expired codes are dead weight; nothing reads them back. */

@@ -43,6 +43,14 @@ export class User {
   @Column({ name: 'phone_number', type: 'varchar', length: 13, nullable: true })
   phoneNumber: string | null; // +998901234567
 
+  /**
+   * bcrypt hash, chosen by the user right after onboarding. Null means "signs
+   * in with an SMS code only". Never serialized into a response — only the
+   * derived `hasPassword` flag leaves the server.
+   */
+  @Column({ name: 'password_hash', type: 'text', nullable: true })
+  passwordHash: string | null;
+
   /** Same rule as `phoneNumber`: only ever a provider-verified address. */
   @Index('uq_users_email', { unique: true })
   @Column({ type: 'citext', nullable: true })

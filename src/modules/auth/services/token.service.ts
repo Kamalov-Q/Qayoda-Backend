@@ -62,6 +62,8 @@ export class TokenService {
         language: user.language,
         role: user.role,
         isVerifiedRealtor: user.isVerifiedRealtor,
+        // Derived flag only — the hash itself must never leave the server.
+        hasPassword: !!user.passwordHash,
       },
     };
   }

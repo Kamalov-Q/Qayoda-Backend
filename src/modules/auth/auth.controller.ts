@@ -28,8 +28,11 @@ import { IdentityService } from './services/identity.service';
 import { TokenService } from './services/token.service';
 import {
   GoogleSignInDto,
+  PhoneLoginDto,
   RefreshDto,
   RequestOtpDto,
+  ResetPasswordDto,
+  SetPasswordDto,
   TelegramPollDto,
   VerifyOtpDto,
 } from './dto/auth.dto';
@@ -75,6 +78,49 @@ export class AuthController {
   @HttpCode(200)
   verifyOtp(@Body() dto: VerifyOtpDto) {
     return this.phone.verifyOtp(dto.phone, dto.code, dto.name, dto.lang);
+  }
+
+  @ApiOperation({
+    summary: 'Sign in with phone + password',
+    description: [
+      'The returning-user path — no SMS is spent. The password is the one set after onboarding.',
+      '',
+      '`PASSWORD_NOT_SET` (401) means the account only knows SMS codes: fall back to `POST /auth/phone/request`. `INVALID_CREDENTIALS` deliberately does not reveal whether the account exists.',
+    ].join('\n'),
+  })
+  @Post('phone/login')
+  @Throttle({ default: { limit: 10, ttl: 600_000 } })
+  @HttpCode(200)
+  phoneLogin(@Body() dto: PhoneLoginDto) {
+    return this.phone.loginWithPassword(dto.phone, dto.password);
+  }
+
+  @ApiOperation({
+    summary: 'Set or change the password',
+    description:
+      'For the signed-in account. Asked right after onboarding; afterwards `POST /auth/phone/login` signs in without an SMS.',
+  })
+  @ApiBearerAuth('access-token')
+  @Post('password')
+  @UseGuards(JwtAccessGuard)
+  @HttpCode(200)
+  setPassword(@CurrentUser() user: AuthUser, @Body() dto: SetPasswordDto) {
+    return this.phone.setPassword(user.sub, dto.password);
+  }
+
+  @ApiOperation({
+    summary: 'Reset the password with an SMS code',
+    description: [
+      'Request a code with `POST /auth/phone/request` first. The code proves phone ownership, the password is replaced, every refresh token is revoked, and a fresh session is returned.',
+      '',
+      '`ACCOUNT_NOT_FOUND` (404) can only surface after a valid code, so it leaks nothing to guessers.',
+    ].join('\n'),
+  })
+  @Post('password/reset')
+  @Throttle({ default: { limit: 10, ttl: 600_000 } })
+  @HttpCode(200)
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.phone.resetPassword(dto.phone, dto.code, dto.password);
   }
 
   // ---------------------------------------------------------------- google

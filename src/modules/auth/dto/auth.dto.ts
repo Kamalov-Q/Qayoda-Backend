@@ -58,6 +58,44 @@ export class VerifyOtpDto extends LocalizedDto {
   name?: string;
 }
 
+export class PhoneLoginDto {
+  @ApiProperty({ example: '+998901234567' })
+  @Transform(stripSeparators)
+  @Matches(PHONE, { message: PHONE_MESSAGE })
+  phone: string;
+
+  @ApiProperty({ description: 'The password set after onboarding.' })
+  @IsString()
+  @MinLength(6)
+  @MaxLength(64)
+  password: string;
+}
+
+export class SetPasswordDto {
+  @ApiProperty({ minLength: 6, maxLength: 64 })
+  @IsString()
+  @MinLength(6)
+  @MaxLength(64)
+  password: string;
+}
+
+export class ResetPasswordDto {
+  @ApiProperty({ example: '+998901234567' })
+  @Transform(stripSeparators)
+  @Matches(PHONE, { message: PHONE_MESSAGE })
+  phone: string;
+
+  @ApiProperty({ example: '123456', description: 'The 6 digits from the SMS.' })
+  @Matches(/^\d{6}$/)
+  code: string;
+
+  @ApiProperty({ minLength: 6, maxLength: 64, description: 'The new password.' })
+  @IsString()
+  @MinLength(6)
+  @MaxLength(64)
+  password: string;
+}
+
 export class GoogleSignInDto extends LocalizedDto {
   @ApiProperty({
     description:
