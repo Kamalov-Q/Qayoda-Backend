@@ -154,8 +154,22 @@ export class CreateListingDto {
   contactPhone?: string;
 
   @ApiPolygonCoordinates()
+  @IsOptional()
   @ValidPolygon({ message: 'Invalida property outline' })
-  coordinates: PolygonCoordinates;
+  coordinates?: PolygonCoordinates;
+
+  @ApiPropertyOptional({
+    type: [Number],
+    example: [69.2401, 41.2995],
+    description:
+      'Approximate location as [lng, lat] — the pin alternative to a drawn boundary. Exactly one of `coordinates` or `point` must be sent.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(2)
+  @ArrayMaxSize(2)
+  @IsNumber({}, { each: true })
+  point?: [number, number];
 
   @ApiProperty({
     type: [OfferInputDto],

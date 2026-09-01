@@ -30,7 +30,16 @@ export class ListingsService {
   ) {}
 
   async create(ownerId: string, dto: CreateListingDto) {
-    const geom = await this.geo.toValidatedPolygon(dto.coordinates);
+    // Exactly one location shape: a drawn boundary (POLYGON) or a dropped
+    // pin (PIN). Neither is a listing nobody can find; both is ambiguous.
+    if (!dto.coordinates === !dto.point) {
+      throw new BadRequestException(
+        'Send exactly one of `coordinates` (boundary) or `point` (pin)',
+      );
+    }
+    const geom = dto.coordinates
+      ? await this.geo.toValidatedPolygon(dto.coordinates)
+      : null;
 
     const listingId = await this.dataSource.transaction(async (manager) => {
       const listingRepo = manager.getRepository(Listing);
@@ -61,13 +70,23 @@ export class ListingsService {
         }),
       );
 
-      await manager.query(
-        `UPDATE listings
-         SET centroid = ST_Centroid(geom::geometry)::geography,
-             area_m2  = ROUND(ST_Area(geom)::numeric, 1)
-         WHERE id = $1`,
-        [listing.id],
-      );
+      if (geom) {
+        await manager.query(
+          `UPDATE listings
+           SET centroid = ST_Centroid(geom::geometry)::geography,
+               area_m2  = ROUND(ST_Area(geom)::numeric, 1)
+           WHERE id = $1`,
+          [listing.id],
+        );
+      } else {
+        // Pin: the point IS the location. No boundary, no derived area.
+        await manager.query(
+          `UPDATE listings
+           SET centroid = ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
+           WHERE id = $3`,
+          [dto.point![0], dto.point![1], listing.id],
+        );
+      }
 
       await offerRepo.save(
         dto.offers.map((o) =>
@@ -228,19 +247,39 @@ export class ListingsService {
   }
 
   async updateGeometry(listing: Listing, dto: UpdateGeometryDto) {
-    const geom = await this.geo.toValidatedPolygon(dto.coordinates);
+    if (!dto.coordinates === !dto.point) {
+      throw new BadRequestException(
+        'Send exactly one of `coordinates` (boundary) or `point` (pin)',
+      );
+    }
+    const geom = dto.coordinates
+      ? await this.geo.toValidatedPolygon(dto.coordinates)
+      : null;
 
     await this.dataSource.transaction(async (manager) => {
-      await manager.query(
-        `UPDATE listings
-         SET geom     = ST_SetSRID(ST_GeomFromGeoJSON($1), 4326)::geography,
-             centroid = ST_Centroid(ST_SetSRID(ST_GeomFromGeoJSON($1), 4326))::geography,
-             -- The area follows the boundary, always — it is not editable.
-             area_m2  = ROUND(ST_Area(ST_SetSRID(ST_GeomFromGeoJSON($1), 4326)::geography)::numeric, 1),
-             updated_at = now()
-         WHERE id = $2`,
-        [JSON.stringify(geom), listing.id],
-      );
+      if (geom) {
+        await manager.query(
+          `UPDATE listings
+           SET geom     = ST_SetSRID(ST_GeomFromGeoJSON($1), 4326)::geography,
+               centroid = ST_Centroid(ST_SetSRID(ST_GeomFromGeoJSON($1), 4326))::geography,
+               -- The area follows the boundary, always — it is not editable.
+               area_m2  = ROUND(ST_Area(ST_SetSRID(ST_GeomFromGeoJSON($1), 4326)::geography)::numeric, 1),
+               updated_at = now()
+           WHERE id = $2`,
+          [JSON.stringify(geom), listing.id],
+        );
+      } else {
+        // Switching to (or moving) a pin drops the boundary and its area.
+        await manager.query(
+          `UPDATE listings
+           SET geom     = NULL,
+               centroid = ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+               area_m2  = NULL,
+               updated_at = now()
+           WHERE id = $3`,
+          [dto.point![0], dto.point![1], listing.id],
+        );
+      }
 
       await this.outbox.publish(
         'listing.geometry_changed',

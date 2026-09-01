@@ -55,9 +55,17 @@ export class Listing {
 
   // GeoJSON, not WKT: TypeORM writes geography params through
   // ST_GeomFromGeoJSON and reads them back through ST_AsGeoJSON.
+  // Nullable since pins arrived: a POLYGON listing carries a drawn boundary,
+  // a PIN listing carries only `centroid`. Exactly one location shape exists
+  // either way — the service refuses a listing with neither.
   @Index({ spatial: true })
-  @Column({ type: 'geography', spatialFeatureType: 'Polygon', srid: 4326 })
-  geom: GeoJsonPolygon;
+  @Column({
+    type: 'geography',
+    spatialFeatureType: 'Polygon',
+    srid: 4326,
+    nullable: true,
+  })
+  geom: GeoJsonPolygon | null;
 
   // Written by service at create/geometry-update time (synchronize:true can't
   // express Postgres GENERATED columns, so we compute it in SQL ourselves).

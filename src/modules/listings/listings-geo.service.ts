@@ -16,7 +16,8 @@ import { POLYGON_ZOOM_THRESHOLD } from './listings.constants';
  */
 export interface ViewportPolygonFeature {
   id: string;
-  geom: GeoJsonPolygon;
+  /** Null for PIN listings — the client draws only the price bubble then. */
+  geom: GeoJsonPolygon | null;
   centroid: GeoJsonPoint | null;
   title: string | null;
   rooms: number | null;
@@ -99,7 +100,7 @@ export class ListingsGeoService {
   LEFT JOIN listing_images li ON li.listing_id = l.id AND li.is_primary
   WHERE l.status = 'ACTIVE'
     AND l.centroid IS NOT NULL
-    AND ST_Intersects(l.geom, ST_MakeEnvelope($2, $3, $4, $5, 4326))
+    AND ST_Intersects(COALESCE(l.geom, l.centroid), ST_MakeEnvelope($2, $3, $4, $5, 4326))
     ${categoryFilter} ${priceMinFilter} ${priceMaxFilter} ${addressFilter}
   ORDER BY l.published_at DESC NULLS LAST
   LIMIT 500
