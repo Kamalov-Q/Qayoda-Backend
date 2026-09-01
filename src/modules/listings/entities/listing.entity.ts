@@ -44,7 +44,12 @@ export class Listing {
   @Column({ type: 'int', nullable: true }) floor: number | null;
   @Column({ name: 'total_floors', type: 'int', nullable: true }) totalFloors:
     number | null;
+  /** Auto-derived from the drawn boundary (reverse geocode) — not typed. */
   @Column({ type: 'text', nullable: true }) address: string | null;
+
+  /** The human wayfinding line — "metro yonida" — typed by the owner. */
+  @Column({ type: 'varchar', length: 160, nullable: true })
+  landmark: string | null;
   @Column({ name: 'contact_phone', type: 'varchar', length: 20, nullable: true })
   contactPhone: string | null;
 

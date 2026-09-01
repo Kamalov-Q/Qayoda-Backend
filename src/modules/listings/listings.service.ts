@@ -53,6 +53,7 @@ export class ListingsService {
           floor: dto.floor ?? null,
           totalFloors: dto.totalFloors ?? null,
           address: dto.address ?? null,
+          landmark: dto.landmark ?? null,
           contactPhone: dto.contactPhone ?? null,
           geom,
           status: ListingStatus.ACTIVE,

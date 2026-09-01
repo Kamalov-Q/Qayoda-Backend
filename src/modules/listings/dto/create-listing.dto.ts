@@ -137,6 +137,16 @@ export class CreateListingDto {
   @MaxLength(500)
   address?: string;
 
+  @ApiPropertyOptional({
+    example: 'Metro Chilonzor yonida',
+    description:
+      'A wayfinding landmark, typed by the owner. The address itself is derived from the drawn boundary.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  landmark?: string;
+
   @ApiPropertyOptional({ example: '+998901234567', maxLength: 20 })
   @IsOptional()
   @IsString()
