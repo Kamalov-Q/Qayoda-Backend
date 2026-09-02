@@ -103,7 +103,9 @@ export class ListingsGeoService {
     AND ST_Intersects(COALESCE(l.geom, l.centroid), ST_MakeEnvelope($2, $3, $4, $5, 4326))
     ${categoryFilter} ${priceMinFilter} ${priceMaxFilter} ${addressFilter}
   ORDER BY l.published_at DESC NULLS LAST
-  LIMIT 500
+  -- 200, not 500: every feature becomes a live view on the client map, and
+  -- Expo Go gets jetsammed long before 500 custom markers render.
+  LIMIT 200
   `,
       params,
     );
@@ -146,7 +148,8 @@ export class ListingsGeoService {
       WHERE purpose = $1
         AND ST_Intersects(centroid, ST_MakeEnvelope($2, $3, $4, $5, 4326))
         ${categoryFilter} ${priceMinFilter} ${priceMaxFilter} ${addressFilter}
-      LIMIT 1000
+      -- Same memory math as the polygon branch.
+      LIMIT 300
       `,
       params,
     );
