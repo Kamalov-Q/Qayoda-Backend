@@ -53,9 +53,9 @@ export class OfferInputDto {
   @ApiProperty({
     example: 'UZS',
     maxLength: 3,
-    description: 'USD or UZS — the price is stored as entered and normalised to USD for filtering.',
+    description:
+      'USD or UZS — the price is stored as entered and normalised to USD for filtering.',
   })
-  
   @MaxLength(3)
   @IsIn(['USD', 'UZS'])
   currency: 'USD' | 'UZS';
@@ -141,16 +141,6 @@ export class CreateListingDto {
   address?: string;
 
   @ApiPropertyOptional({
-    example: 'Metro Chilonzor yonida',
-    description:
-      'A wayfinding landmark, typed by the owner. The address itself is derived from the drawn boundary.',
-  })
-  @IsOptional()
-  @IsString()
-  @MaxLength(160)
-  landmark?: string;
-
-  @ApiPropertyOptional({
     isArray: true,
     enum: LISTING_PROPERTY_KEYS,
     example: ['REPAIRED', 'FURNISHED', 'AC'],
@@ -213,7 +203,7 @@ export class CreateListingDto {
 
   @IsOptional()
   @IsArray()
-  @ArrayMaxSize(15)
+  @ArrayMaxSize(30)
   @ValidateNested({ each: true })
   @Type(() => ImageInputDto)
   images?: ImageInputDto[];

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { DataSource, Repository } from 'typeorm';
+import { In, DataSource, Repository } from 'typeorm';
 import { Listing } from '../entities/listing.entity';
 import { ListingStatus } from '../enums/listing-status.enum';
 
@@ -16,11 +16,12 @@ export class ListingRepository extends Repository<Listing> {
     });
   }
 
-  findMine(ownerId: string) {
+  findMine(ownerId: string, limit?: number, offset?: number) {
     return this.find({
       where: { ownerId },
       relations: { offers: true, images: true },
       order: { createdAt: 'DESC' },
+      ...(limit ? { take: limit, skip: offset ?? 0 } : {}),
     });
   }
 
@@ -81,30 +82,43 @@ export class ListingRepository extends Repository<Listing> {
   /**
    * "More like this" for the detail page: same category, nearest first when
    * the anchor has a location, freshest first when it somehow does not.
+   *
+   * Two steps on purpose: ids first (no joins → no TypeORM DISTINCT wrapper,
+   * which chokes on a raw KNN ORDER BY on some Postgres setups — the prod-only
+   * 500), then a plain relation fetch re-ordered to match.
    */
-  findSimilar(anchor: Listing, limit: number) {
-    const qb = this.createQueryBuilder('l')
-      .leftJoinAndSelect('l.offers', 'offer')
-      .leftJoinAndSelect('l.images', 'image')
+  async findSimilar(anchor: Listing, limit: number): Promise<Listing[]> {
+    const idsQb = this.createQueryBuilder('l')
+      .select('l.id', 'id')
       .where('l.status = :status', { status: ListingStatus.ACTIVE })
       .andWhere('l.id != :id', { id: anchor.id })
-      .andWhere('l.category = :category', { category: anchor.category });
+      .andWhere('l.category = :category', { category: anchor.category })
+      .limit(limit);
 
-    // Defensive: a legacy row's centroid can come back malformed (or as raw
-    // WKB on an odd driver/PostGIS pairing) — falling back to "freshest
-    // first" beats a 500 on every detail page.
     const coords = anchor.centroid?.coordinates;
     if (Array.isArray(coords) && coords.length === 2) {
       const [lng, lat] = coords;
-      qb.orderBy(
-        'l.centroid <-> ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography',
-        'ASC',
-      ).setParameters({ lng, lat });
+      idsQb
+        .orderBy(
+          'l.centroid <-> ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography',
+          'ASC',
+        )
+        .setParameters({ lng, lat });
     } else {
-      qb.orderBy('l.publishedAt', 'DESC');
+      idsQb.orderBy('l.publishedAt', 'DESC');
     }
 
-    return qb.take(limit).getMany();
+    const rows = await idsQb.getRawMany<{ id: string }>();
+    if (rows.length === 0) return [];
+    const ids = rows.map((r) => r.id);
+
+    const listings = await this.find({
+      where: { id: In(ids) },
+      relations: { offers: true, images: true },
+    });
+    // find() ignores the KNN order — restore it.
+    const rank = new Map(ids.map((id, i) => [id, i]));
+    return listings.sort((a, b) => rank.get(a.id)! - rank.get(b.id)!);
   }
 
   /** The freshest ACTIVE listings, for the Home screen strip. */

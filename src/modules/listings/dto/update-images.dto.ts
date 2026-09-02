@@ -21,7 +21,7 @@ export class ImageInputDto {
 
 export class UpdateImagesDto {
   @IsArray()
-  @ArrayMaxSize(15)
+  @ArrayMaxSize(30)
   @ValidateNested({ each: true })
   @Type(() => ImageInputDto)
   images: ImageInputDto[];

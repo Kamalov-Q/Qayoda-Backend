@@ -52,9 +52,6 @@ export class Listing {
   properties: string[] | null;
 
 
-  /** The human wayfinding line — "metro yonida" — typed by the owner. */
-  @Column({ type: 'varchar', length: 160, nullable: true })
-  landmark: string | null;
   @Column({ name: 'contact_phone', type: 'varchar', length: 20, nullable: true })
   contactPhone: string | null;
 

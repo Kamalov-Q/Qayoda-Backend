@@ -86,6 +86,15 @@ export class SetPasswordDto {
   @MinLength(6)
   @MaxLength(64)
   password: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Required when the account already has a password — changing it means proving you know it. First-time set needs nothing.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  currentPassword?: string;
 }
 
 export class ResetPasswordDto {

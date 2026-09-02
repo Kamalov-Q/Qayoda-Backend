@@ -210,11 +210,29 @@ export class PhoneAuthService {
     return { ...(await this.tokens.issuePair(user)), isNew: false };
   }
 
-  /** Called by the signed-in user — right after onboarding, or from settings. */
-  async setPassword(userId: string, password: string) {
-    await this.ds
-      .getRepository(User)
-      .update({ id: userId }, { passwordHash: await bcrypt.hash(password, 10) });
+  /**
+   * First-time set (after onboarding) writes directly; a CHANGE — the account
+   * already holds a hash — demands the current password first, so a stolen
+   * unlocked phone cannot silently swap the lock.
+   */
+  async setPassword(userId: string, password: string, currentPassword?: string) {
+    const repo = this.ds.getRepository(User);
+    const user = await repo.findOne({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException({ code: 'ACCOUNT_DELETED' });
+
+    if (user.passwordHash) {
+      const ok =
+        !!currentPassword &&
+        (await bcrypt.compare(currentPassword, user.passwordHash));
+      if (!ok) {
+        throw new UnauthorizedException({ code: 'CURRENT_PASSWORD_WRONG' });
+      }
+    }
+
+    await repo.update(
+      { id: userId },
+      { passwordHash: await bcrypt.hash(password, 10) },
+    );
     return { set: true };
   }
 

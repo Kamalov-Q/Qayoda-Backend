@@ -31,7 +31,7 @@ import {
   ChatAttachmentResponse,
 } from './responses/upload.response';
 
-const MAX_FILES = 15;
+const MAX_FILES = 30;
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const MAX_CHAT_FILE_SIZE = 50 * 1024 * 1024;
 

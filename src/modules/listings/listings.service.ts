@@ -19,6 +19,7 @@ import { UpdateImagesDto } from './dto/update-images.dto';
 import { ListingSaveRepository } from './repositories/listing-save.repository';
 import { categoryHasFloors } from './listings.constants';
 import { RatesService } from 'src/shared/rates/rates.service';
+import { TtlCache } from 'src/shared/cache/ttl-cache';
 
 @Injectable()
 export class ListingsService {
@@ -30,6 +31,13 @@ export class ListingsService {
     private readonly rates: RatesService,
     private readonly dataSource: DataSource,
   ) {}
+
+  /**
+   * Read-through cache over the hottest public reads. Feed pages live 15s,
+   * the Home strip 30s, similar 60s; every write below clears the lot, so
+   * publishing is always instantly visible.
+   */
+  private readonly cache = new TtlCache();
 
   async create(ownerId: string, dto: CreateListingDto) {
     // Exactly one location shape: a drawn boundary (POLYGON) or a dropped
@@ -64,7 +72,6 @@ export class ListingsService {
           floor: dto.floor ?? null,
           totalFloors: dto.totalFloors ?? null,
           address: dto.address ?? null,
-          landmark: dto.landmark ?? null,
           contactPhone: dto.contactPhone ?? null,
           properties: dto.properties?.length ? dto.properties : null,
           geom,
@@ -125,6 +132,7 @@ export class ListingsService {
       return listing.id;
     });
 
+    this.cache.clear();
     return this.findById(listingId);
   }
 
@@ -134,11 +142,21 @@ export class ListingsService {
     return listing;
   }
 
-  findMine(ownerId: string) {
-    return this.listings.findMine(ownerId);
+  findMine(ownerId: string, limit?: number, offset?: number) {
+    return this.listings.findMine(
+      ownerId,
+      limit ? Math.min(limit, 50) : undefined,
+      offset,
+    );
   }
 
   findFeed(dto: import('./dto/list-listings.dto').ListListingsDto) {
+    return this.cache.wrap(`feed:${JSON.stringify(dto)}`, 15_000, () =>
+      this.uncachedFeed(dto),
+    );
+  }
+
+  private uncachedFeed(dto: import('./dto/list-listings.dto').ListListingsDto) {
     return this.listings.findFeed({
       purpose: dto.purpose,
       category: dto.category,
@@ -151,15 +169,22 @@ export class ListingsService {
     });
   }
 
-  async findSimilar(id: string, limit: number) {
-    const anchor = await this.listings.findWithRelations(id);
-    if (!anchor) throw new NotFoundException('Listing not found');
-    return this.listings.findSimilar(anchor, Math.min(Math.max(limit, 1), 12));
+  findSimilar(id: string, limit: number) {
+    return this.cache.wrap(`similar:${id}:${limit}`, 60_000, async () => {
+      const anchor = await this.listings.findWithRelations(id);
+      if (!anchor) throw new NotFoundException('Listing not found');
+      return this.listings.findSimilar(
+        anchor,
+        Math.min(Math.max(limit, 1), 12),
+      );
+    });
   }
 
   /** Clamped so a crafted limit cannot pull the whole table. */
   findLatest(limit: number) {
-    return this.listings.findLatest(Math.min(Math.max(limit, 1), 30));
+    return this.cache.wrap(`latest:${limit}`, 30_000, () =>
+      this.listings.findLatest(Math.min(Math.max(limit, 1), 30)),
+    );
   }
 
   findPublicByOwner(ownerId: string) {
@@ -201,6 +226,7 @@ export class ListingsService {
     applyFloors(listing, dto, patch);
 
     await this.listings.update(listing.id, patch);
+    this.cache.clear();
     return this.findById(listing.id);
   }
 
@@ -242,6 +268,7 @@ export class ListingsService {
       }
     });
 
+    this.cache.clear();
     return this.findById(listing.id);
   }
 
@@ -264,6 +291,7 @@ export class ListingsService {
         manager,
       );
     });
+    this.cache.clear();
     return this.findById(listing.id);
   }
 
@@ -311,6 +339,7 @@ export class ListingsService {
       );
     });
 
+    this.cache.clear();
     return this.findById(listing.id);
   }
 
@@ -326,6 +355,7 @@ export class ListingsService {
       );
     });
 
+    this.cache.clear();
     return { success: true };
   }
 
@@ -347,7 +377,8 @@ export class ListingsService {
     // Idempotent: restoring a live listing is a no-op rather than an error, so
     // a double tap over a flaky connection cannot fail the second time.
     if (listing.status !== ListingStatus.ARCHIVED) {
-      return this.findById(listing.id);
+      this.cache.clear();
+    return this.findById(listing.id);
     }
 
     await this.dataSource.transaction(async (manager) => {
@@ -361,6 +392,7 @@ export class ListingsService {
       );
     });
 
+    this.cache.clear();
     return this.findById(listing.id);
   }
 

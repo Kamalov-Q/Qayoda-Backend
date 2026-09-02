@@ -119,8 +119,17 @@ export class ListingsController {
   // Must stay declared above `:id` — routes match in declaration order, and
   // `mine` would otherwise be read as a listing id and rejected by ParseUUIDPipe.
   @Get('mine')
-  findMine(@CurrentUser() user: AuthUser) {
-    return this.listingsService.findMine(user.sub);
+  findMine(
+    @CurrentUser() user: AuthUser,
+    // Optional: omitted → the full set, as before. Capped at 50 per page.
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    return this.listingsService.findMine(
+      user.sub,
+      limit ? Number(limit) : undefined,
+      offset ? Number(offset) : undefined,
+    );
   }
 
   @ApiOperation({
