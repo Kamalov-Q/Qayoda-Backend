@@ -89,8 +89,12 @@ export class ListingRepository extends Repository<Listing> {
       .andWhere('l.id != :id', { id: anchor.id })
       .andWhere('l.category = :category', { category: anchor.category });
 
-    if (anchor.centroid) {
-      const [lng, lat] = anchor.centroid.coordinates;
+    // Defensive: a legacy row's centroid can come back malformed (or as raw
+    // WKB on an odd driver/PostGIS pairing) — falling back to "freshest
+    // first" beats a 500 on every detail page.
+    const coords = anchor.centroid?.coordinates;
+    if (Array.isArray(coords) && coords.length === 2) {
+      const [lng, lat] = coords;
       qb.orderBy(
         'l.centroid <-> ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography',
         'ASC',

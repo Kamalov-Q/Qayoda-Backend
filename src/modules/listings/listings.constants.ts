@@ -21,6 +21,9 @@ export const POLYGON_ZOOM_THRESHOLD = 16;
 export const FLOOR_CAPABLE_CATEGORIES: readonly PropertyCategory[] = [
   PropertyCategory.APARTMENT,
   PropertyCategory.BUILDING,
+  // A shop or office IS usually "2nd floor of something" — excluding it made
+  // the floors section vanish for exactly the people who needed it.
+  PropertyCategory.NON_RESIDENTIAL,
 ];
 
 export const categoryHasFloors = (category: PropertyCategory): boolean =>
