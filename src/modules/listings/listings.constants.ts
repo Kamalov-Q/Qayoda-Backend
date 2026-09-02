@@ -24,6 +24,8 @@ export const FLOOR_CAPABLE_CATEGORIES: readonly PropertyCategory[] = [
   // A shop or office IS usually "2nd floor of something" — excluding it made
   // the floors section vanish for exactly the people who needed it.
   PropertyCategory.NON_RESIDENTIAL,
+  // A hotel is a building — its floor count sells it the same way.
+  PropertyCategory.HOTEL,
 ];
 
 export const categoryHasFloors = (category: PropertyCategory): boolean =>

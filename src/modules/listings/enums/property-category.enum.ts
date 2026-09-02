@@ -5,4 +5,5 @@ export enum PropertyCategory {
   LAND = 'LAND',
   BUILDING = 'BUILDING',
   DACHA = 'DACHA',
+  HOTEL = 'HOTEL',
 }
