@@ -3,6 +3,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsEnum,
+  IsIn,
   IsInt,
   IsNumber,
   IsOptional,
@@ -25,6 +26,7 @@ import { MAX_FLOORS, MIN_FLOOR } from '../listings.constants';
 import { ApiPolygonCoordinates } from '../decorators/api-polygon-coordinates.decorator';
 import type { PolygonCoordinates } from '../types/geojson.type';
 import { ImageInputDto } from './update-images.dto';
+import { LISTING_PROPERTY_KEYS } from '../listings.constants';
 
 export class OfferInputDto {
   @ApiProperty({
@@ -51,11 +53,12 @@ export class OfferInputDto {
   @ApiProperty({
     example: 'UZS',
     maxLength: 3,
-    description: 'ISO 4217 currency code.',
+    description: 'USD or UZS — the price is stored as entered and normalised to USD for filtering.',
   })
-  @IsString()
+  
   @MaxLength(3)
-  currency: string;
+  @IsIn(['USD', 'UZS'])
+  currency: 'USD' | 'UZS';
 }
 
 export class CreateListingDto {
@@ -147,6 +150,19 @@ export class CreateListingDto {
   @MaxLength(160)
   landmark?: string;
 
+  @ApiPropertyOptional({
+    isArray: true,
+    enum: LISTING_PROPERTY_KEYS,
+    example: ['REPAIRED', 'FURNISHED', 'AC'],
+    description:
+      'Amenity keys. The clients render localized uz/ru labels for them.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(LISTING_PROPERTY_KEYS.length)
+  @IsIn(LISTING_PROPERTY_KEYS as unknown as string[], { each: true })
+  properties?: string[];
+
   @ApiPropertyOptional({ example: '+998901234567', maxLength: 20 })
   @IsOptional()
   @IsString()
@@ -155,7 +171,7 @@ export class CreateListingDto {
 
   @ApiPolygonCoordinates()
   @IsOptional()
-  @ValidPolygon({ message: 'Invalida property outline' })
+  @ValidPolygon({ message: 'Invalid property outline' })
   coordinates?: PolygonCoordinates;
 
   @ApiPropertyOptional({

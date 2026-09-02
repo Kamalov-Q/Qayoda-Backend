@@ -72,11 +72,11 @@ export class ListingsGeoService {
     }
     if (q.priceMin !== undefined) {
       params.push(q.priceMin);
-      priceMinFilter = `AND o.price >= $${++i}`;
+      priceMinFilter = `AND o.price_usd >= $${++i}`;
     }
     if (q.priceMax !== undefined) {
       params.push(q.priceMax);
-      priceMaxFilter = `AND o.price <= $${++i}`;
+      priceMaxFilter = `AND o.price_usd <= $${++i}`;
     }
     let addressFilter = '';
     if (q.address) {
@@ -123,11 +123,11 @@ export class ListingsGeoService {
     }
     if (q.priceMin !== undefined) {
       params.push(q.priceMin);
-      priceMinFilter = `AND price >= $${++i}`;
+      priceMinFilter = `AND price_usd >= $${++i}`;
     }
     if (q.priceMax !== undefined) {
       params.push(q.priceMax);
-      priceMaxFilter = `AND price <= $${++i}`;
+      priceMaxFilter = `AND price_usd <= $${++i}`;
     }
     let addressFilter = '';
     if (q.address) {

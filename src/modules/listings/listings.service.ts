@@ -18,6 +18,7 @@ import { ListingImage } from './entities/listing-image.entity';
 import { UpdateImagesDto } from './dto/update-images.dto';
 import { ListingSaveRepository } from './repositories/listing-save.repository';
 import { categoryHasFloors } from './listings.constants';
+import { RatesService } from 'src/shared/rates/rates.service';
 
 @Injectable()
 export class ListingsService {
@@ -26,6 +27,7 @@ export class ListingsService {
     private readonly saves: ListingSaveRepository,
     private readonly geo: ListingsGeoService,
     private readonly outbox: OutBoxService,
+    private readonly rates: RatesService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -64,6 +66,7 @@ export class ListingsService {
           address: dto.address ?? null,
           landmark: dto.landmark ?? null,
           contactPhone: dto.contactPhone ?? null,
+          properties: dto.properties?.length ? dto.properties : null,
           geom,
           status: ListingStatus.ACTIVE,
           publishedAt: new Date(),
@@ -90,7 +93,11 @@ export class ListingsService {
 
       await offerRepo.save(
         dto.offers.map((o) =>
-          offerRepo.create({ ...o, listingId: listing.id }),
+          offerRepo.create({
+            ...o,
+            listingId: listing.id,
+            priceUsd: this.rates.toUsd(o.price, o.currency),
+          }),
         ),
       );
 
@@ -244,7 +251,11 @@ export class ListingsService {
       await offerRepo.delete({ listingId: listing.id });
       await offerRepo.save(
         dto.offers.map((o) =>
-          offerRepo.create({ ...o, listingId: listing.id }),
+          offerRepo.create({
+            ...o,
+            listingId: listing.id,
+            priceUsd: this.rates.toUsd(o.price, o.currency),
+          }),
         ),
       );
       await this.outbox.publish(

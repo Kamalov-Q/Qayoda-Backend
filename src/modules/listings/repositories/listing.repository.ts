@@ -53,10 +53,11 @@ export class ListingRepository extends Repository<Listing> {
       .where('l.status = :status', { status: ListingStatus.ACTIVE });
 
     if (q.category) qb.andWhere('l.category = :category', { category: q.category });
+    // Bounds arrive in USD; priceUsd is the currency-blind comparison column.
     if (q.priceMin !== undefined)
-      qb.andWhere('match.price >= :priceMin', { priceMin: q.priceMin });
+      qb.andWhere('match.priceUsd >= :priceMin', { priceMin: q.priceMin });
     if (q.priceMax !== undefined)
-      qb.andWhere('match.price <= :priceMax', { priceMax: q.priceMax });
+      qb.andWhere('match.priceUsd <= :priceMax', { priceMax: q.priceMax });
     if (q.search) {
       qb.andWhere('(l.title ILIKE :search OR l.address ILIKE :search)', {
         search: `%${q.search.replace(/[\\%_]/g, '\\$&')}%`,
@@ -70,8 +71,8 @@ export class ListingRepository extends Repository<Listing> {
       // refuses to ORDER BY a joined column that subquery does not select —
       // "column distinctAlias.match_price does not exist". Selecting it under
       // the exact alias TypeORM will reference makes the wrapper legal.
-      qb.addSelect('match.price', 'match_price');
-      qb.orderBy('match.price', q.sort === 'priceAsc' ? 'ASC' : 'DESC');
+      qb.addSelect('match.priceUsd', 'match_price');
+      qb.orderBy('match.priceUsd', q.sort === 'priceAsc' ? 'ASC' : 'DESC');
     }
 
     return qb.skip(q.offset).take(q.limit).getMany();

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { RatesModule } from 'src/shared/rates/rates.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Listing } from './entities/listing.entity';
 import { ListingOffer } from './entities/listing-offer.entity';
@@ -20,6 +21,7 @@ import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
+    RatesModule,
     TypeOrmModule.forFeature([
       Listing,
       ListingOffer,

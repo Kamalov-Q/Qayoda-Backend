@@ -47,6 +47,11 @@ export class Listing {
   /** Auto-derived from the drawn boundary (reverse geocode) — not typed. */
   @Column({ type: 'text', nullable: true }) address: string | null;
 
+  /** Amenity keys from LISTING_PROPERTY_KEYS — labels live client-side. */
+  @Column({ type: 'jsonb', nullable: true })
+  properties: string[] | null;
+
+
   /** The human wayfinding line — "metro yonida" — typed by the owner. */
   @Column({ type: 'varchar', length: 160, nullable: true })
   landmark: string | null;

@@ -19,6 +19,10 @@ export class ListingMapPoint {
   @Column({ type: 'enum', enum: PropertyCategory }) category: PropertyCategory;
   @Column({ type: 'numeric', precision: 14, scale: 2 }) price: number;
   @Column({ type: 'char', length: 3 }) currency: string;
+
+  /** Normalised for currency-blind price filtering, same as the offer row. */
+  @Column({ name: 'price_usd', type: 'numeric', precision: 14, scale: 2, nullable: true })
+  priceUsd: number | null;
   @Index({ spatial: true })
   @Column({ type: 'geography', spatialFeatureType: 'Point', srid: 4326 })
   centroid: GeoJsonPoint;

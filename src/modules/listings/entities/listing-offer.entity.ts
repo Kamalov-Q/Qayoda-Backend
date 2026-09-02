@@ -20,5 +20,10 @@ export class ListingOffer {
   @Column({ type: 'enum', enum: OfferPurpose }) purpose: OfferPurpose;
   @Column({ type: 'numeric', precision: 14, scale: 2 }) price: number;
   @Column({ type: 'char', length: 3, default: 'USD' }) currency: string;
+
+  /** `price` normalised to USD at save time — filtering and sorting must not
+   *  compare so'm against dollars. Nullable only for pre-currency rows. */
+  @Column({ name: 'price_usd', type: 'numeric', precision: 14, scale: 2, nullable: true })
+  priceUsd: number | null;
   @Column({ name: 'is_active', default: true }) isActive: boolean;
 }

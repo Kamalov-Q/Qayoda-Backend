@@ -38,3 +38,22 @@ export const categoryHasFloors = (category: PropertyCategory): boolean =>
  */
 export const MIN_FLOOR = -10;
 export const MAX_FLOORS = 200;
+
+/**
+ * The amenity catalog. Stored on the listing as an array of these keys; the
+ * clients own the uz/ru labels, so adding a language never touches data.
+ */
+export const LISTING_PROPERTY_KEYS = [
+  'REPAIRED',
+  'FURNISHED',
+  'AC',
+  'HEATING',
+  'PARKING',
+  'GARAGE',
+  'BALCONY',
+  'ELEVATOR',
+  'INTERNET',
+  'SECURITY',
+  'POOL',
+  'GARDEN',
+] as const;

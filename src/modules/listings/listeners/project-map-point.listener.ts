@@ -35,11 +35,11 @@ export class ProjectMapPointListener {
           await manager.query(
             `
           INSERT INTO listing_map_points
-            (listing_id, purpose, category, price, currency, centroid, thumb_url, address, updated_at)
+            (listing_id, purpose, category, price, currency, price_usd, centroid, thumb_url, address, updated_at)
           SELECT l.id,
                  o.purpose::text::listing_map_points_purpose_enum,
                  l.category::text::listing_map_points_category_enum,
-                 o.price, o.currency, l.centroid, li.thumb_url, l.address, now()
+                 o.price, o.currency, o.price_usd, l.centroid, li.thumb_url, l.address, now()
           FROM listings l
           JOIN listing_offers o ON o.listing_id = l.id AND o.is_active
           LEFT JOIN listing_images li ON li.listing_id = l.id AND li.is_primary
