@@ -55,10 +55,10 @@ export class ListingsService {
             ? stripHtml(dto.descriptionHtml)
             : null,
           rooms: dto.rooms ?? null,
-          // Derived, never client-supplied: the drawn boundary IS the area.
-          // Computed from the geography column right below, in the same
-          // transaction; stays null for listings posted without a polygon.
-          areaM2: null,
+          // POLYGON: derived from the boundary right below, never typed.
+          // PIN: there is no boundary to measure, so the typed value is the
+          // only source there is.
+          areaM2: dto.point ? (dto.areaM2 ?? null) : null,
           floor: dto.floor ?? null,
           totalFloors: dto.totalFloors ?? null,
           address: dto.address ?? null,
@@ -144,6 +144,12 @@ export class ListingsService {
     });
   }
 
+  async findSimilar(id: string, limit: number) {
+    const anchor = await this.listings.findWithRelations(id);
+    if (!anchor) throw new NotFoundException('Listing not found');
+    return this.listings.findSimilar(anchor, Math.min(Math.max(limit, 1), 12));
+  }
+
   /** Clamped so a crafted limit cannot pull the whole table. */
   findLatest(limit: number) {
     return this.listings.findLatest(Math.min(Math.max(limit, 1), 30));
@@ -174,6 +180,10 @@ export class ListingsService {
 
   async update(listing: Listing, dto: UpdateListingDto) {
     const patch: Partial<Listing> = { ...dto };
+
+    // The typed area is a PIN-only privilege; on a polygon listing the
+    // boundary owns the number and a PATCH must not overwrite it.
+    if (listing.geom) delete patch.areaM2;
 
     if (dto.descriptionHtml !== undefined) {
       patch.descriptionText = dto.descriptionHtml

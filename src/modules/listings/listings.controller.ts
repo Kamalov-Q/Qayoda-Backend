@@ -183,6 +183,19 @@ export class ListingsController {
     description: 'The id is not a valid UUID.',
   })
   @ApiNotFoundResponse(NO_LISTING)
+  @ApiOperation({
+    summary: 'Similar listings',
+    description:
+      'Same-category ACTIVE listings, nearest to this one first — the "more like this" strip on the detail page. Public. `limit` defaults to 6, capped at 12.',
+  })
+  @Get(':id/similar')
+  findSimilar(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('limit', new DefaultValuePipe(6), ParseIntPipe) limit: number,
+  ) {
+    return this.listingsService.findSimilar(id, limit);
+  }
+
   @Get(':id')
   findById(@Param('id', ParseUUIDPipe) id: string) {
     return this.listingsService.findById(id);

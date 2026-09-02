@@ -77,6 +77,31 @@ export class ListingRepository extends Repository<Listing> {
     return qb.skip(q.offset).take(q.limit).getMany();
   }
 
+  /**
+   * "More like this" for the detail page: same category, nearest first when
+   * the anchor has a location, freshest first when it somehow does not.
+   */
+  findSimilar(anchor: Listing, limit: number) {
+    const qb = this.createQueryBuilder('l')
+      .leftJoinAndSelect('l.offers', 'offer')
+      .leftJoinAndSelect('l.images', 'image')
+      .where('l.status = :status', { status: ListingStatus.ACTIVE })
+      .andWhere('l.id != :id', { id: anchor.id })
+      .andWhere('l.category = :category', { category: anchor.category });
+
+    if (anchor.centroid) {
+      const [lng, lat] = anchor.centroid.coordinates;
+      qb.orderBy(
+        'l.centroid <-> ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography',
+        'ASC',
+      ).setParameters({ lng, lat });
+    } else {
+      qb.orderBy('l.publishedAt', 'DESC');
+    }
+
+    return qb.take(limit).getMany();
+  }
+
   /** The freshest ACTIVE listings, for the Home screen strip. */
   findLatest(limit: number) {
     return this.find({

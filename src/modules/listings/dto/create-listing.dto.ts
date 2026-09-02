@@ -171,6 +171,18 @@ export class CreateListingDto {
   @IsNumber({}, { each: true })
   point?: [number, number];
 
+  @ApiPropertyOptional({
+    example: 78.5,
+    minimum: 0,
+    description:
+      'Floor area in m². Accepted ONLY together with `point` — polygon listings derive it from the drawn boundary and ignore this field.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  areaM2?: number;
+
   @ApiProperty({
     type: [OfferInputDto],
     minItems: 1,
