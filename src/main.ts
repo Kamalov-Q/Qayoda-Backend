@@ -26,7 +26,7 @@ async function bootstrap() {
   app.enableCors({ origin: true, credentials: true });
 
   const config = new DocumentBuilder()
-    .setTitle('uyNest API')
+    .setTitle('Growen City API')
     .setDescription(
       [
         'Authentication, listings, media and chat endpoints.',

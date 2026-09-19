@@ -65,10 +65,13 @@ export class ListingsService {
             ? stripHtml(dto.descriptionHtml)
             : null,
           rooms: dto.rooms ?? null,
-          // POLYGON: derived from the boundary right below, never typed.
+          // Whatever the owner sent wins, in both modes. POLYGON: the app
+          // pre-fills it from the boundary and the owner may correct it
+          // (a drawn outline is an estimate — walls, shared land); when it
+          // is missing it is derived from the boundary right below.
           // PIN: there is no boundary to measure, so the typed value is the
           // only source there is.
-          areaM2: dto.point ? (dto.areaM2 ?? null) : null,
+          areaM2: dto.areaM2 ?? null,
           floor: dto.floor ?? null,
           totalFloors: dto.totalFloors ?? null,
           address: dto.address ?? null,
@@ -84,7 +87,8 @@ export class ListingsService {
         await manager.query(
           `UPDATE listings
            SET centroid = ST_Centroid(geom::geometry)::geography,
-               area_m2  = ROUND(ST_Area(geom)::numeric, 1)
+               -- The owner's figure if they sent one, else the boundary's.
+               area_m2  = COALESCE(area_m2, ROUND(ST_Area(geom)::numeric, 1))
            WHERE id = $1`,
           [listing.id],
         );
@@ -213,9 +217,8 @@ export class ListingsService {
   async update(listing: Listing, dto: UpdateListingDto) {
     const patch: Partial<Listing> = { ...dto };
 
-    // The typed area is a PIN-only privilege; on a polygon listing the
-    // boundary owns the number and a PATCH must not overwrite it.
-    if (listing.geom) delete patch.areaM2;
+    // The area is editable on every listing: on a polygon one the boundary
+    // only supplies the starting figure, and the owner may correct it.
 
     if (dto.descriptionHtml !== undefined) {
       patch.descriptionText = dto.descriptionHtml
@@ -311,7 +314,8 @@ export class ListingsService {
           `UPDATE listings
            SET geom     = ST_SetSRID(ST_GeomFromGeoJSON($1), 4326)::geography,
                centroid = ST_Centroid(ST_SetSRID(ST_GeomFromGeoJSON($1), 4326))::geography,
-               -- The area follows the boundary, always — it is not editable.
+               -- A new boundary makes the old figure meaningless, so it is
+               -- re-derived here; the owner can correct it again afterwards.
                area_m2  = ROUND(ST_Area(ST_SetSRID(ST_GeomFromGeoJSON($1), 4326)::geography)::numeric, 1),
                updated_at = now()
            WHERE id = $2`,

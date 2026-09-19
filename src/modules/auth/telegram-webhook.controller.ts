@@ -59,7 +59,7 @@ export class TelegramWebhookController {
 
     const token = text.split(' ')[1];
     if (!token) {
-      await this.reply(from.id, 'UyNest ilovasi orqali kiring.');
+      await this.reply(from.id, 'Growen City ilovasi orqali kiring.');
       return { ok: true };
     }
 
@@ -70,10 +70,13 @@ export class TelegramWebhookController {
       language_code: from.language_code,
     });
 
+    // The app shows this same code on its waiting screen, so someone with two
+    // sessions open can tell which one they just approved.
+    const shortCode = token.slice(0, 6).toUpperCase();
     await this.reply(
       from.id,
       ok
-        ? '✅ Tasdiqlandi! Ilovaga qayting.'
+        ? `✅ Tasdiqlandi (${shortCode})! Ilovaga qayting.`
         : "❌ Havola eskirgan. Ilovada qaytadan urinib ko'ring.",
     );
     return { ok: true };

@@ -181,7 +181,7 @@ export class CreateListingDto {
     example: 78.5,
     minimum: 0,
     description:
-      'Floor area in m². Accepted ONLY together with `point` — polygon listings derive it from the drawn boundary and ignore this field.',
+      'Floor area in m². With `point` it is the only source of the area. With `coordinates` it is optional: sent, it overrides the boundary-derived figure (an outline is an estimate); omitted, the area is computed from the boundary.',
   })
   @IsOptional()
   @Type(() => Number)
