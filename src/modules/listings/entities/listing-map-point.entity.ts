@@ -8,7 +8,6 @@ import {
   UpdateDateColumn,
   Index,
 } from 'typeorm';
-import { PropertyCategory } from '../enums/property-category.enum';
 import { OfferPurpose } from '../enums/offer-purpose.enum';
 import type { GeoJsonPoint } from '../types/geojson.type';
 
@@ -16,7 +15,8 @@ import type { GeoJsonPoint } from '../types/geojson.type';
 export class ListingMapPoint {
   @PrimaryColumn('uuid', { name: 'listing_id' }) listingId: string;
   @PrimaryColumn({ type: 'enum', enum: OfferPurpose }) purpose: OfferPurpose;
-  @Column({ type: 'enum', enum: PropertyCategory }) category: PropertyCategory;
+  /** Category slug — varchar(40) to match the conversion in pre-sync.ts. */
+  @Column({ type: 'varchar', length: 40 }) category: string;
   @Column({ type: 'numeric', precision: 14, scale: 2 }) price: number;
   @Column({ type: 'char', length: 3 }) currency: string;
 

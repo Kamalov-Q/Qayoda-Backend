@@ -17,7 +17,7 @@ import { UpdateGeometryDto } from './dto/update-geometry.dto';
 import { ListingImage } from './entities/listing-image.entity';
 import { UpdateImagesDto } from './dto/update-images.dto';
 import { ListingSaveRepository } from './repositories/listing-save.repository';
-import { categoryHasFloors } from './listings.constants';
+import { CategoriesService } from '../categories/categories.service';
 import { RatesService } from 'src/shared/rates/rates.service';
 import { TtlCache } from 'src/shared/cache/ttl-cache';
 
@@ -30,6 +30,7 @@ export class ListingsService {
     private readonly outbox: OutBoxService,
     private readonly rates: RatesService,
     private readonly dataSource: DataSource,
+    private readonly categories: CategoriesService,
   ) {}
 
   /**
@@ -47,6 +48,17 @@ export class ListingsService {
         'Send exactly one of `coordinates` (boundary) or `point` (pin)',
       );
     }
+    // Categories are admin-managed now, so validity and the floor rule are
+    // checked against the table rather than a fixed enum. Floors sent for a
+    // category that can't have them are refused, as the old DTO rule did.
+    const category = await this.categories.requireUsable(dto.category);
+    if (!category.floorCapable && (dto.floor != null || dto.totalFloors != null)) {
+      throw new BadRequestException({
+        code: 'FLOORS_NOT_ALLOWED',
+        message: `floor / totalFloors are not used for ${category.nameUz} listings`,
+      });
+    }
+
     const geom = dto.coordinates
       ? await this.geo.toValidatedPolygon(dto.coordinates)
       : null;
@@ -226,7 +238,13 @@ export class ListingsService {
         : null;
     }
 
-    applyFloors(listing, dto, patch);
+    // A category being changed to must be a live one; the listing's current
+    // category may have been hidden since, which must not break its edits.
+    const category =
+      dto.category !== undefined && dto.category !== listing.category
+        ? await this.categories.requireUsable(dto.category)
+        : await this.categories.find(listing.category);
+    applyFloors(listing, patch, category?.floorCapable ?? false);
 
     await this.listings.update(listing.id, patch);
     this.cache.clear();
@@ -415,21 +433,20 @@ export class ListingsService {
  *
  * Two things the DTO cannot see on a partial update:
  *
- *  - the category may not be in the body, so `@FloorAllowedForCategory` waves
- *    the values through. Re-checked here against the effective category — and
- *    when the category itself is being *moved* out of the floor-capable set
- *    (a `BUILDING` refiled as a `HOUSE`), the stored floors are cleared rather
- *    than rejected: they are no longer wrong input, just stale data.
+ *  - whether the effective category (the new one, or the stored one when the
+ *    body has none) allows floors — its `floorCapable` flag, passed in by the
+ *    caller since categories live in the database. When the category is being
+ *    *moved* to one without floors (a `BUILDING` refiled as a `HOUSE`), the
+ *    stored floors are cleared rather than rejected: they are no longer wrong
+ *    input, just stale data.
  *  - `floor` may arrive alone, to be compared against a stored `totalFloors`.
  */
 function applyFloors(
   listing: Listing,
-  dto: UpdateListingDto,
   patch: Partial<Listing>,
+  floorCapable: boolean,
 ): void {
-  const category = dto.category ?? listing.category;
-
-  if (!categoryHasFloors(category)) {
+  if (!floorCapable) {
     patch.floor = null;
     patch.totalFloors = null;
     return;

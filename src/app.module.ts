@@ -13,6 +13,7 @@ import { MediaModule } from './modules/media/media.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { UsersModule } from './modules/users/users.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { CategoriesModule } from './modules/categories/categories.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { AdminModule } from './modules/admin/admin.module';
     ChatModule,
     UsersModule,
     AdminModule,
+    CategoriesModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

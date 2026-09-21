@@ -9,9 +9,10 @@ import {
   IsString,
   MaxLength,
   Min,
+  Matches,
 } from 'class-validator';
 import { OfferPurpose } from '../enums/offer-purpose.enum';
-import { PropertyCategory } from '../enums/property-category.enum';
+import { CATEGORY_SLUG } from '../../categories/categories.constants';
 
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -22,10 +23,13 @@ export class ListListingsDto {
   @IsEnum(OfferPurpose)
   purpose: OfferPurpose;
 
-  @ApiPropertyOptional({ enum: PropertyCategory })
+  @ApiPropertyOptional({
+    example: 'APARTMENT',
+    description: 'A category slug (GET /categories). Omit to include every category.',
+  })
   @IsOptional()
-  @IsEnum(PropertyCategory)
-  category?: PropertyCategory;
+  @Matches(CATEGORY_SLUG)
+  category?: string;
 
   @ApiPropertyOptional({ minimum: 0 })
   @IsOptional()

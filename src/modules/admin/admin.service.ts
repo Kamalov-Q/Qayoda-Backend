@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, In, Repository } from 'typeorm';
+import { Brackets, In, Repository, SelectQueryBuilder } from 'typeorm';
 import { User } from '../users/entities/user.entity';
 import { Listing } from '../listings/entities/listing.entity';
 import { ListingImage } from '../listings/entities/listing-image.entity';
@@ -50,6 +50,7 @@ export class AdminService {
       activeListings,
       archivedListings,
       newListings,
+      listingsByCategory,
     ] = await Promise.all([
       this.users.count(),
       this.users.count({ where: { role: UserRole.ADMIN } }),
@@ -61,6 +62,7 @@ export class AdminService {
         .createQueryBuilder('l')
         .where('l.created_at >= :since', { since })
         .getCount(),
+      this.countByCategory(),
     ]);
 
     return {
@@ -70,6 +72,7 @@ export class AdminService {
         active: activeListings,
         archived: archivedListings,
         newThisWeek: newListings,
+        byCategory: listingsByCategory,
       },
     };
   }
@@ -120,6 +123,41 @@ export class AdminService {
     };
   }
 
+  /**
+   * Status + search, applied identically to the page of rows and to the
+   * category counts, so a chip's number is exactly what clicking it lists.
+   * Category is NOT applied here: the counts are per category by definition.
+   */
+  private applyListingFilters(
+    qb: SelectQueryBuilder<Listing>,
+    query: AdminListingsQueryDto,
+  ) {
+    if (query.status) qb.andWhere('l.status = :status', { status: query.status });
+    if (query.q?.trim()) {
+      const q = `%${query.q.trim()}%`;
+      qb.andWhere(
+        new Brackets((w) =>
+          w.where('l.title ILIKE :q', { q }).orWhere('l.address ILIKE :q', { q }),
+        ),
+      );
+    }
+    return qb;
+  }
+
+  /** Listing counts per category, as a { APARTMENT: 12, … } map. */
+  private async countByCategory(query?: AdminListingsQueryDto) {
+    const qb = this.listings
+      .createQueryBuilder('l')
+      .select('l.category', 'category')
+      .addSelect('COUNT(*)', 'count')
+      .groupBy('l.category');
+    if (query) this.applyListingFilters(qb, query);
+    const rows = await qb.getRawMany<{ category: string; count: string }>();
+    // COUNT comes back as a string (bigint); categories with no listings are
+    // absent from the result and read as 0 on the client.
+    return Object.fromEntries(rows.map((r) => [r.category, Number(r.count)]));
+  }
+
   async findListings(query: AdminListingsQueryDto) {
     const limit = query.limit ?? DEFAULT_LIMIT;
     const offset = query.offset ?? 0;
@@ -134,18 +172,15 @@ export class AdminService {
       .take(limit)
       .skip(offset);
 
-    if (query.status) qb.andWhere('l.status = :status', { status: query.status });
-
-    if (query.q?.trim()) {
-      const q = `%${query.q.trim()}%`;
-      qb.andWhere(
-        new Brackets((w) =>
-          w.where('l.title ILIKE :q', { q }).orWhere('l.address ILIKE :q', { q }),
-        ),
-      );
+    this.applyListingFilters(qb, query);
+    if (query.category) {
+      qb.andWhere('l.category = :category', { category: query.category });
     }
 
-    const [rows, total] = await qb.getManyAndCount();
+    const [[rows, total], byCategory] = await Promise.all([
+      qb.getManyAndCount(),
+      this.countByCategory(query),
+    ]);
 
     // One keyed read for every owner on the page. Guarded: TypeORM reads an
     // empty `where: []` as "no condition" and would load every user.
@@ -177,6 +212,7 @@ export class AdminService {
 
     return {
       total,
+      byCategory,
       items: rows.map((l) => ({
         id: l.id,
         thumbUrl: thumbByListing.get(l.id) ?? null,

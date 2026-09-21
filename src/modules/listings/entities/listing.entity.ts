@@ -8,7 +8,6 @@ import {
   UpdateDateColumn,
   Index,
 } from 'typeorm';
-import { PropertyCategory } from '../enums/property-category.enum';
 import { ListingStatus } from '../enums/listing-status.enum';
 import { ListingImage } from './listing-image.entity';
 import { ListingOffer } from './listing-offer.entity';
@@ -21,7 +20,15 @@ export class Listing {
   // Plain id — never a relation to the users module's User entity
   @Index() @Column({ name: 'owner_id', type: 'uuid' }) ownerId: string;
 
-  @Column({ type: 'enum', enum: PropertyCategory }) category: PropertyCategory;
+  /**
+   * A category slug (see the categories table). Was a Postgres enum; now text
+   * so admins can add categories. The column was converted in place by
+   * pre-sync.ts — varchar(40) here must keep matching that, or synchronize
+   * would "fix" the difference by dropping the column.
+   */
+  @Index()
+  @Column({ type: 'varchar', length: 40 })
+  category: string;
 
   @Index()
   @Column({ type: 'enum', enum: ListingStatus, default: ListingStatus.DRAFT })

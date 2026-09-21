@@ -28,17 +28,16 @@ export class ProjectMapPointListener {
           );
           // `synchronize` gives every enum column its own Postgres type named
           // `<table>_<column>_enum`, and Postgres will not implicitly cast
-          // between two of them — so the source enums are round-tripped through
-          // text into this table's own types. (A shared `enumName` across both
-          // entities is not an option: synchronize emits one CREATE TYPE per
-          // column and the second collides.)
+          // between two of them — so purpose is round-tripped through text into
+          // this table's own type. Category is plain text in both tables (it
+          // became admin-managed data), so it copies across uncast.
           await manager.query(
             `
           INSERT INTO listing_map_points
             (listing_id, purpose, category, price, currency, price_usd, centroid, thumb_url, address, updated_at)
           SELECT l.id,
                  o.purpose::text::listing_map_points_purpose_enum,
-                 l.category::text::listing_map_points_category_enum,
+                 l.category,
                  o.price, o.currency, o.price_usd, l.centroid, li.thumb_url, l.address, now()
           FROM listings l
           JOIN listing_offers o ON o.listing_id = l.id AND o.is_active

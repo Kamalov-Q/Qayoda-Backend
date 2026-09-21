@@ -1,7 +1,8 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, IsString, Max, MaxLength, Min, Matches } from 'class-validator';
 import { ListingStatus } from '../../listings/enums/listing-status.enum';
+import { CATEGORY_SLUG } from '../../categories/categories.constants';
 import { UserRole } from '../../../shared/enums';
 
 /** Shared paging for the dashboard tables. */
@@ -41,4 +42,12 @@ export class AdminListingsQueryDto extends AdminPageDto {
   @IsOptional()
   @IsEnum(ListingStatus)
   status?: ListingStatus;
+
+  @ApiPropertyOptional({
+    example: 'APARTMENT',
+    description: 'A category slug (GET /categories). Omit to include every category.',
+  })
+  @IsOptional()
+  @Matches(CATEGORY_SLUG)
+  category?: string;
 }

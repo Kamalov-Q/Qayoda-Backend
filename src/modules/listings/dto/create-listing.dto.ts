@@ -3,6 +3,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsEnum,
+  Matches,
   IsIn,
   IsInt,
   IsNumber,
@@ -16,12 +17,9 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { OfferPurpose } from '../enums/offer-purpose.enum';
 import { Type } from 'class-transformer';
-import { PropertyCategory } from '../enums/property-category.enum';
+import { CATEGORY_SLUG } from '../../categories/categories.constants';
 import { ValidPolygon } from '../validators/valid-polygon.validator';
-import {
-  FloorAllowedForCategory,
-  NotAboveTotalFloors,
-} from '../validators/floors.validator';
+import { NotAboveTotalFloors } from '../validators/floors.validator';
 import { MAX_FLOORS, MIN_FLOOR } from '../listings.constants';
 import { ApiPolygonCoordinates } from '../decorators/api-polygon-coordinates.decorator';
 import type { PolygonCoordinates } from '../types/geojson.type';
@@ -63,12 +61,12 @@ export class OfferInputDto {
 
 export class CreateListingDto {
   @ApiProperty({
-    enum: PropertyCategory,
-    enumName: 'PropertyCategory',
-    example: PropertyCategory.APARTMENT,
+    example: 'APARTMENT',
+    description:
+      'A category slug from GET /categories. Categories are managed by admins, so the set is not fixed; an unknown or hidden one is refused with CATEGORY_UNKNOWN.',
   })
-  @IsEnum(PropertyCategory)
-  category: PropertyCategory;
+  @Matches(CATEGORY_SLUG, { message: 'category must be a category slug' })
+  category: string;
 
   @ApiPropertyOptional({
     example: '3-room apartment near Chorsu',
@@ -102,8 +100,8 @@ export class CreateListingDto {
     maximum: MAX_FLOORS,
     description:
       'Floor the unit is on. May be negative for basement levels. Accepted only ' +
-      'for the categories that can be stacked (`APARTMENT`, `BUILDING`); omit it ' +
-      'for a single-storey property of any category.',
+      'for categories with `floorCapable` (see GET /categories); omit it for a ' +
+      'single-storey property of any category.',
   })
   @IsOptional()
   @Type(() => Number)
@@ -111,7 +109,6 @@ export class CreateListingDto {
   @Min(MIN_FLOOR)
   @Max(MAX_FLOORS)
   @NotAboveTotalFloors()
-  @FloorAllowedForCategory()
   floor?: number;
 
   @ApiPropertyOptional({
@@ -128,7 +125,6 @@ export class CreateListingDto {
   @IsInt()
   @Min(1)
   @Max(MAX_FLOORS)
-  @FloorAllowedForCategory()
   totalFloors?: number;
 
   @ApiPropertyOptional({
@@ -150,7 +146,7 @@ export class CreateListingDto {
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(LISTING_PROPERTY_KEYS.length)
-  @IsIn(LISTING_PROPERTY_KEYS as unknown as string[], { each: true })
+  @IsIn(LISTING_PROPERTY_KEYS, { each: true })
   properties?: string[];
 
   @ApiPropertyOptional({ example: '+998901234567', maxLength: 20 })

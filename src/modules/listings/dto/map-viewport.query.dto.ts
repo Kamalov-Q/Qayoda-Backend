@@ -8,10 +8,11 @@ import {
   Max,
   MaxLength,
   Min,
+  Matches,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { OfferPurpose } from '../enums/offer-purpose.enum';
-import { PropertyCategory } from '../enums/property-category.enum';
+import { CATEGORY_SLUG } from '../../categories/categories.constants';
 import { POLYGON_ZOOM_THRESHOLD } from '../listings.constants';
 
 export class MapViewportQueryDto {
@@ -71,14 +72,12 @@ export class MapViewportQueryDto {
   purpose: OfferPurpose;
 
   @ApiPropertyOptional({
-    enum: PropertyCategory,
-    enumName: 'PropertyCategory',
-    example: PropertyCategory.APARTMENT,
-    description: 'Omit to include every category.',
+    example: 'APARTMENT',
+    description: 'A category slug (GET /categories). Omit to include every category.',
   })
   @IsOptional()
-  @IsEnum(PropertyCategory)
-  category?: PropertyCategory;
+  @Matches(CATEGORY_SLUG)
+  category?: string;
 
   @ApiPropertyOptional({
     example: 500000000,
