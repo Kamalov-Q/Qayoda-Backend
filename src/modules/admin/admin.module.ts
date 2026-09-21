@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
+import { ListingsModule } from '../listings/listings.module';
 import { User } from '../users/entities/user.entity';
 import { Listing } from '../listings/entities/listing.entity';
 import { AdminController } from './admin.controller';
@@ -14,7 +15,7 @@ import { AdminSeedService } from './admin-seed.service';
  * counts across everything.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([User, Listing]), AuthModule],
+  imports: [TypeOrmModule.forFeature([User, Listing]), AuthModule, ListingsModule],
   controllers: [AdminController],
   providers: [AdminService, AdminSeedService],
 })

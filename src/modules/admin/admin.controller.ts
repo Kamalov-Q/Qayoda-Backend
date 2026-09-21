@@ -1,10 +1,28 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import type { AuthUser } from '../auth/types/auth-user.type';
 import { Roles, RolesGuard } from '../../shared/guards/roles.guard';
 import { UserRole } from '../../shared/enums';
+import { UpdateListingDto } from '../listings/dto/update-listing.dto';
 import { AdminService } from './admin.service';
 import { AdminListingsQueryDto, AdminUsersQueryDto } from './dto/admin-query.dto';
+import {
+  AdminListingStatusDto,
+  AdminUserRoleDto,
+  AdminUserStatusDto,
+} from './dto/admin-mutation.dto';
 
 /**
  * Everything the web dashboard reads. Guarded twice on purpose: JwtAccessGuard
@@ -40,5 +58,70 @@ export class AdminController {
   @Get('listings')
   listings(@Query() query: AdminListingsQueryDto) {
     return this.admin.findListings(query);
+  }
+
+  @ApiOperation({
+    summary: 'Ban or reactivate a user',
+    description:
+      'Banning also revokes every refresh token, so the account is locked out immediately. Admins cannot ban themselves or other admins (demote first).',
+  })
+  @Patch('users/:id/status')
+  setUserStatus(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AdminUserStatusDto,
+  ) {
+    return this.admin.setUserStatus(user.sub, id, dto);
+  }
+
+  @ApiOperation({ summary: 'Grant or revoke the ADMIN role' })
+  @Patch('users/:id/role')
+  setUserRole(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AdminUserRoleDto,
+  ) {
+    return this.admin.setUserRole(user.sub, id, dto);
+  }
+
+  @ApiOperation({ summary: 'One listing with images, offers, and owner' })
+  @Get('listings/:id')
+  listing(@Param('id', ParseUUIDPipe) id: string) {
+    return this.admin.getListing(id);
+  }
+
+  @ApiOperation({
+    summary: 'Edit listing fields',
+    description: 'Same validation as the owner-facing update endpoint.',
+  })
+  @Patch('listings/:id')
+  updateListing(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateListingDto,
+  ) {
+    return this.admin.updateListing(id, dto);
+  }
+
+  @ApiOperation({
+    summary: 'Activate or archive a listing',
+    description:
+      'Goes through the same flow as the owner archive/restore, so map projection and caches stay in sync.',
+  })
+  @Patch('listings/:id/status')
+  setListingStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AdminListingStatusDto,
+  ) {
+    return this.admin.setListingStatus(id, dto);
+  }
+
+  @ApiOperation({
+    summary: 'Archive a listing (the app’s delete)',
+    description:
+      'Identical to the owner pressing delete: soft-archive, off the map, record kept.',
+  })
+  @Delete('listings/:id')
+  deleteListing(@Param('id', ParseUUIDPipe) id: string) {
+    return this.admin.setListingStatus(id, { status: 'ARCHIVED' });
   }
 }

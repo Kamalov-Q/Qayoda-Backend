@@ -32,4 +32,33 @@ export class ListingsFacade {
   async getSummaries(listingIds: string[]) {
     return this.listingsService.getSummaries(listingIds);
   }
+
+  // ---- moderation passthroughs (admin dashboard) --------------------------
+  // Routed through ListingsService so archive/restore keep their side effects
+  // (outbox events driving the map-point projection, feed-cache clears).
+
+  findById(listingId: string) {
+    return this.listingsService.findById(listingId);
+  }
+
+  async archiveById(listingId: string) {
+    return this.listingsService.archive(await this.mustGet(listingId));
+  }
+
+  async restoreById(listingId: string) {
+    return this.listingsService.restore(await this.mustGet(listingId));
+  }
+
+  async updateById(
+    listingId: string,
+    dto: import('./dto/update-listing.dto').UpdateListingDto,
+  ) {
+    return this.listingsService.update(await this.mustGet(listingId), dto);
+  }
+
+  private async mustGet(listingId: string) {
+    const listing = await this.listings.findOneBy({ id: listingId });
+    if (!listing) throw new NotFoundException('Listing not found');
+    return listing;
+  }
 }
