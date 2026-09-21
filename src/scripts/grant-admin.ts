@@ -1,5 +1,9 @@
 /**
- * Promote (or demote) an account by phone number.
+ * Promote (or demote) an account by phone number, by hand.
+ *
+ * Admins are normally seeded automatically from ADMIN_PHONES on every boot
+ * (AdminSeedService). This stays for the one thing the seed never does:
+ * taking admin rights away.
  *
  *   npm run admin:grant -- +998901234567
  *   npm run admin:grant -- +998901234567 --revoke

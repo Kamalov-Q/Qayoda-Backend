@@ -5,6 +5,7 @@ import { User } from '../users/entities/user.entity';
 import { Listing } from '../listings/entities/listing.entity';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
+import { AdminSeedService } from './admin-seed.service';
 
 /**
  * The web dashboard's own module. It reads other modules' entities directly
@@ -15,6 +16,6 @@ import { AdminService } from './admin.service';
 @Module({
   imports: [TypeOrmModule.forFeature([User, Listing]), AuthModule],
   controllers: [AdminController],
-  providers: [AdminService],
+  providers: [AdminService, AdminSeedService],
 })
 export class AdminModule {}
