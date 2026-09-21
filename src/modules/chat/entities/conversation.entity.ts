@@ -6,9 +6,9 @@ import { Message } from './message.entity';
 export class Conversation {
   @PrimaryGeneratedColumn('uuid') id: string;
 
-  @Index() @Column({ name: 'listing_id' }) listingId: string;
-  @Index() @Column({ name: 'host_id' }) hostId: string;
-  @Index() @Column({ name: 'guest_id' }) guestId: string;
+  @Index() @Column({ name: 'listing_id', type: 'uuid' }) listingId: string;
+  @Index() @Column({ name: 'host_id', type: 'uuid' }) hostId: string;
+  @Index() @Column({ name: 'guest_id', type: 'uuid' }) guestId: string;
 
   @Column({ name: 'last_message_at', type: 'timestamptz', nullable: true })
   lastMessageAt: Date | null;

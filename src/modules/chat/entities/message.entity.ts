@@ -27,7 +27,7 @@ export class Message {
   @JoinColumn({ name: 'conversation_id' })
   conversation: Conversation;
 
-  @Column({ name: 'sender_id' }) senderId: string;
+  @Column({ name: 'sender_id', type: 'uuid' }) senderId: string;
 
   @Column({ type: 'enum', enum: MessageType, default: MessageType.TEXT })
   type: MessageType;

@@ -19,7 +19,7 @@ export class Listing {
   @PrimaryGeneratedColumn('uuid') id: string;
 
   // Plain id — never a relation to the users module's User entity
-  @Index() @Column({ name: 'owner_id' }) ownerId: string;
+  @Index() @Column({ name: 'owner_id', type: 'uuid' }) ownerId: string;
 
   @Column({ type: 'enum', enum: PropertyCategory }) category: PropertyCategory;
 
