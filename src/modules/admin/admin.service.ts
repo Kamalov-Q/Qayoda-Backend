@@ -124,12 +124,11 @@ export class AdminService {
     const limit = query.limit ?? DEFAULT_LIMIT;
     const offset = query.offset ?? 0;
 
+    // No join to users here: owners are read in one keyed query below. A raw
+    // `u.id = l.owner_id` join also broke on databases where synchronize had
+    // created owner_id as varchar (Postgres has no uuid = varchar operator).
     const qb = this.listings
       .createQueryBuilder('l')
-      // The owner's name is the column the dashboard is scanned by, so it is
-      // joined rather than fetched per row.
-      .leftJoin('users', 'u', 'u.id = l.owner_id')
-      .addSelect(['u.id', 'u.name', 'u.surname', 'u.phone_number'])
       .leftJoinAndSelect('l.offers', 'o')
       .orderBy('l.created_at', 'DESC')
       .take(limit)
@@ -148,12 +147,15 @@ export class AdminService {
 
     const [rows, total] = await qb.getManyAndCount();
 
-    // getRawAndEntities would pair these up in one pass, but the owner columns
-    // are only three fields — a second keyed read is simpler to follow.
-    const owners = await this.users.find({
-      where: rows.map((l) => ({ id: l.ownerId })),
-      select: { id: true, name: true, surname: true, phoneNumber: true },
-    });
+    // One keyed read for every owner on the page. Guarded: TypeORM reads an
+    // empty `where: []` as "no condition" and would load every user.
+    const ownerIds = [...new Set(rows.map((l) => l.ownerId))];
+    const owners = ownerIds.length
+      ? await this.users.find({
+          where: { id: In(ownerIds) },
+          select: { id: true, name: true, surname: true, phoneNumber: true },
+        })
+      : [];
     const ownerById = new Map(owners.map((o) => [o.id, o]));
 
     // One cover photo per row. Joined after paging, not in the main query:
