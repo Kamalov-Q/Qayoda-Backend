@@ -15,6 +15,7 @@ import { UsersModule } from './modules/users/users.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { AmenitiesModule } from './modules/amenities/amenities.module';
+import { ReportsModule } from './modules/reports/reports.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { AmenitiesModule } from './modules/amenities/amenities.module';
     AdminModule,
     CategoriesModule,
     AmenitiesModule,
+    ReportsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

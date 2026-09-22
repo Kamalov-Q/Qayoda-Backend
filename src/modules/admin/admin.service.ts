@@ -12,6 +12,7 @@ import { ListingStatus } from '../listings/enums/listing-status.enum';
 import { ListingsFacade } from '../listings/listings.facade';
 import { UpdateListingDto } from '../listings/dto/update-listing.dto';
 import { TokenService } from '../auth/services/token.service';
+import { ReportsService } from '../reports/reports.service';
 import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
 import { UserRole, UserStatus } from '../../shared/enums';
 import { AdminListingsQueryDto, AdminUsersQueryDto } from './dto/admin-query.dto';
@@ -36,6 +37,7 @@ export class AdminService {
     @InjectRepository(Listing) private readonly listings: Repository<Listing>,
     private readonly listingsFacade: ListingsFacade,
     private readonly tokens: TokenService,
+    private readonly reportsService: ReportsService,
   ) {}
 
   async overview() {
@@ -51,6 +53,7 @@ export class AdminService {
       archivedListings,
       newListings,
       listingsByCategory,
+      openReports,
     ] = await Promise.all([
       this.users.count(),
       this.users.count({ where: { role: UserRole.ADMIN } }),
@@ -63,6 +66,7 @@ export class AdminService {
         .where('l.created_at >= :since', { since })
         .getCount(),
       this.countByCategory(),
+      this.reportsService.openCount(),
     ]);
 
     return {
@@ -74,6 +78,7 @@ export class AdminService {
         newThisWeek: newListings,
         byCategory: listingsByCategory,
       },
+      reports: { open: openReports },
     };
   }
 
