@@ -14,6 +14,7 @@ import { ChatModule } from './modules/chat/chat.module';
 import { UsersModule } from './modules/users/users.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { CategoriesModule } from './modules/categories/categories.module';
+import { AmenitiesModule } from './modules/amenities/amenities.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { CategoriesModule } from './modules/categories/categories.module';
     UsersModule,
     AdminModule,
     CategoriesModule,
+    AmenitiesModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

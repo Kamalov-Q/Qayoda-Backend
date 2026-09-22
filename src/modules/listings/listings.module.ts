@@ -19,6 +19,7 @@ import { ListingOwnershipGuard } from './guards/listing-ownership.guard';
 import { ProjectMapPointListener } from './listeners/project-map-point.listener';
 import { AuthModule } from '../auth/auth.module';
 import { CategoriesModule } from '../categories/categories.module';
+import { AmenitiesModule } from '../amenities/amenities.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { CategoriesModule } from '../categories/categories.module';
     ]),
     AuthModule,
     CategoriesModule,
+    AmenitiesModule,
   ],
   controllers: [ListingsMapController, ListingsController],
   providers: [

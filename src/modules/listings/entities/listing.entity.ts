@@ -54,7 +54,7 @@ export class Listing {
   /** Auto-derived from the drawn boundary (reverse geocode) — not typed. */
   @Column({ type: 'text', nullable: true }) address: string | null;
 
-  /** Amenity keys from LISTING_PROPERTY_KEYS — labels live client-side. */
+  /** Amenity keys from the amenities table (see AmenitiesModule). */
   @Column({ type: 'jsonb', nullable: true })
   properties: string[] | null;
 

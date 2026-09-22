@@ -18,6 +18,7 @@ import { ListingImage } from './entities/listing-image.entity';
 import { UpdateImagesDto } from './dto/update-images.dto';
 import { ListingSaveRepository } from './repositories/listing-save.repository';
 import { CategoriesService } from '../categories/categories.service';
+import { AmenitiesService } from '../amenities/amenities.service';
 import { RatesService } from 'src/shared/rates/rates.service';
 import { TtlCache } from 'src/shared/cache/ttl-cache';
 
@@ -31,6 +32,7 @@ export class ListingsService {
     private readonly rates: RatesService,
     private readonly dataSource: DataSource,
     private readonly categories: CategoriesService,
+    private readonly amenities: AmenitiesService,
   ) {}
 
   /**
@@ -52,6 +54,8 @@ export class ListingsService {
     // checked against the table rather than a fixed enum. Floors sent for a
     // category that can't have them are refused, as the old DTO rule did.
     const category = await this.categories.requireUsable(dto.category);
+    // Amenities are admin-managed too: every key must exist in the catalogue.
+    await this.amenities.assertValidKeys(dto.properties);
     if (!category.floorCapable && (dto.floor != null || dto.totalFloors != null)) {
       throw new BadRequestException({
         code: 'FLOORS_NOT_ALLOWED',
@@ -244,6 +248,7 @@ export class ListingsService {
       dto.category !== undefined && dto.category !== listing.category
         ? await this.categories.requireUsable(dto.category)
         : await this.categories.find(listing.category);
+    await this.amenities.assertValidKeys(dto.properties);
     applyFloors(listing, patch, category?.floorCapable ?? false);
 
     await this.listings.update(listing.id, patch);

@@ -24,7 +24,7 @@ import { MAX_FLOORS, MIN_FLOOR } from '../listings.constants';
 import { ApiPolygonCoordinates } from '../decorators/api-polygon-coordinates.decorator';
 import type { PolygonCoordinates } from '../types/geojson.type';
 import { ImageInputDto } from './update-images.dto';
-import { LISTING_PROPERTY_KEYS } from '../listings.constants';
+
 
 export class OfferInputDto {
   @ApiProperty({
@@ -138,15 +138,16 @@ export class CreateListingDto {
 
   @ApiPropertyOptional({
     isArray: true,
-    enum: LISTING_PROPERTY_KEYS,
+    type: String,
     example: ['REPAIRED', 'FURNISHED', 'AC'],
     description:
-      'Amenity keys. The clients render localized uz/ru labels for them.',
+      'Amenity keys from GET /amenities (admin-managed). Unknown keys are refused with UNKNOWN_AMENITY. The clients render the uz/ru labels the catalogue carries.',
   })
   @IsOptional()
   @IsArray()
-  @ArrayMaxSize(LISTING_PROPERTY_KEYS.length)
-  @IsIn(LISTING_PROPERTY_KEYS, { each: true })
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @MaxLength(40, { each: true })
   properties?: string[];
 
   @ApiPropertyOptional({ example: '+998901234567', maxLength: 20 })
