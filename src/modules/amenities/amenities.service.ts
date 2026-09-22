@@ -106,6 +106,16 @@ export class AmenitiesService implements OnApplicationBootstrap {
   }
 
   async create(dto: CreateAmenityDto) {
+    // A safety bound, not a feature: every consumer (the app's chips, the
+    // dashboard table, the in-memory cache) is built for a complete, small
+    // catalogue — so the catalogue is kept small by construction instead of
+    // paginating readers that need all of it anyway.
+    if ((await this.amenities.count()) >= MAX_CATALOG) {
+      throw new ConflictException({
+        code: 'CATALOG_FULL',
+        message: `No more than ${MAX_CATALOG} amenities`,
+      });
+    }
     if (await this.amenities.existsBy({ key: dto.key })) {
       throw new ConflictException({
         code: 'AMENITY_EXISTS',
@@ -159,3 +169,6 @@ export class AmenitiesService implements OnApplicationBootstrap {
     return { deleted: key, strippedFrom: inUse };
   }
 }
+
+/** See create(): the catalogue stays small by construction. */
+const MAX_CATALOG = 100;

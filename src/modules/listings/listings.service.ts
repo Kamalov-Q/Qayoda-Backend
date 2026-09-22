@@ -56,7 +56,10 @@ export class ListingsService {
     const category = await this.categories.requireUsable(dto.category);
     // Amenities are admin-managed too: every key must exist in the catalogue.
     await this.amenities.assertValidKeys(dto.properties);
-    if (!category.floorCapable && (dto.floor != null || dto.totalFloors != null)) {
+    if (
+      !category.floorCapable &&
+      (dto.floor != null || dto.totalFloors != null)
+    ) {
       throw new BadRequestException({
         code: 'FLOORS_NOT_ALLOWED',
         message: `floor / totalFloors are not used for ${category.nameUz} listings`,
@@ -226,8 +229,29 @@ export class ListingsService {
     return { saved: false };
   }
 
-  findSaved(userId: string) {
-    return this.saves.findSavedFor(userId);
+  findSaved(userId: string, limit?: number, offset?: number) {
+    return this.saves.findSavedFor(
+      userId,
+      limit ? Math.min(limit, 50) : undefined,
+      offset,
+    );
+  }
+
+  async findSavedIds(userId: string): Promise<string[]> {
+    return await this.saves.findSavedIdsFor(userId);
+  }
+
+  /**
+   * The account screen's three numbers, counted in the database — so the
+   * screens themselves can paginate without losing the totals.
+   */
+  async counts(userId: string) {
+    const [mine, mineActive, saved] = await Promise.all([
+      this.listings.countBy({ ownerId: userId }),
+      this.listings.countBy({ ownerId: userId, status: ListingStatus.ACTIVE }),
+      this.saves.countBy({ userId }),
+    ]);
+    return { mine, mineActive, saved };
   }
 
   async update(listing: Listing, dto: UpdateListingDto) {
@@ -405,7 +429,7 @@ export class ListingsService {
     // a double tap over a flaky connection cannot fail the second time.
     if (listing.status !== ListingStatus.ARCHIVED) {
       this.cache.clear();
-    return this.findById(listing.id);
+      return this.findById(listing.id);
     }
 
     await this.dataSource.transaction(async (manager) => {

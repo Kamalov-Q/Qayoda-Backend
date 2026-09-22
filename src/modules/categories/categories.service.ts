@@ -108,6 +108,14 @@ export class CategoriesService implements OnApplicationBootstrap {
   }
 
   async create(dto: CreateCategoryDto) {
+    // Same safety bound as amenities: consumers need the whole catalogue,
+    // so it is kept small by construction rather than paginated.
+    if ((await this.categories.count()) >= 100) {
+      throw new ConflictException({
+        code: 'CATALOG_FULL',
+        message: 'No more than 100 categories',
+      });
+    }
     if (await this.categories.existsBy({ slug: dto.slug })) {
       throw new ConflictException({
         code: 'CATEGORY_EXISTS',

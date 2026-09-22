@@ -133,17 +133,52 @@ export class ListingsController {
   }
 
   @ApiOperation({
+    summary: 'Counts for the account screen',
+    description:
+      'Own listings (total and ACTIVE) and saved listings, counted in the database — the lists themselves paginate, so their lengths are no longer the totals.',
+  })
+  @ApiUnauthorizedResponse({ type: ErrorResponse })
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAccessGuard)
+  // Same declaration-order rule as `mine`: must sit above `:id`.
+  @Get('counts')
+  counts(@CurrentUser() user: AuthUser) {
+    return this.listingsService.counts(user.sub);
+  }
+
+  @ApiOperation({
+    summary: 'Ids of saved listings',
+    description:
+      'Just the listing ids, most recently saved first. Cheap at any count — what the app’s save-hearts subscribe to, while the saved LIST paginates separately.',
+  })
+  @ApiUnauthorizedResponse({ type: ErrorResponse })
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAccessGuard)
+  @Get('saved/ids')
+  findSavedIds(@CurrentUser() user: AuthUser) {
+    return this.listingsService.findSavedIds(user.sub);
+  }
+
+  @ApiOperation({
     summary: 'List saved listings',
     description:
-      'Every listing the caller has saved, most recently saved first, in the same shape as `/listings/mine`.',
+      'Every listing the caller has saved, most recently saved first, in the same shape as `/listings/mine`. Optional `limit` (capped at 50) and `offset` page it; omitted, the full set returns as before.',
   })
   @ApiUnauthorizedResponse({ type: ErrorResponse })
   @ApiBearerAuth('access-token')
   @UseGuards(JwtAccessGuard)
   // Same declaration-order rule as `mine`: must sit above `:id`.
   @Get('saved')
-  findSaved(@CurrentUser() user: AuthUser) {
-    return this.listingsService.findSaved(user.sub);
+  findSaved(
+    @CurrentUser() user: AuthUser,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    return this.listingsService.findSaved(
+      user.sub,
+      limit ? Number(limit) : undefined,
+      offset ? Number(offset) : undefined,
+    );
   }
 
   @ApiOperation({
