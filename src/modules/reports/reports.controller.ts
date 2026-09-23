@@ -19,8 +19,10 @@ import { ReportsService } from './reports.service';
 import {
   AdminReportsQueryDto,
   AdminReportStatusDto,
+  CreateChatReportDto,
   CreateReportDto,
 } from './dto/report.dto';
+import { ChatReportsService } from './chat-reports.service';
 
 @ApiTags('Listings')
 @Controller('listings')
@@ -67,5 +69,65 @@ export class AdminReportsController {
     @Body() dto: AdminReportStatusDto,
   ) {
     return this.reportsService.setStatus(id, dto);
+  }
+}
+
+@ApiTags('Chat')
+@ApiBearerAuth('access-token')
+@Controller('chat/conversations')
+@UseGuards(JwtAccessGuard)
+export class ChatReportsController {
+  constructor(private readonly chatReports: ChatReportsService) {}
+
+  @ApiOperation({
+    summary: 'Report a conversation',
+    description:
+      "Flags the chat for the moderators. Only its two participants may report it, once each — a second attempt returns ALREADY_REPORTED. `comment` is required for OTHER; `messageId` optionally pins the message that prompted it. This report is also what lets a moderator read the thread: unreported conversations are not readable by anyone but the participants.",
+  })
+  @Post(':id/report')
+  report(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateChatReportDto,
+  ) {
+    return this.chatReports.create(id, user.sub, dto);
+  }
+}
+
+@ApiTags('Admin')
+@ApiBearerAuth()
+@Controller('admin/chat-reports')
+@UseGuards(JwtAccessGuard, RolesGuard)
+@Roles(UserRole.ADMIN)
+export class AdminChatReportsController {
+  constructor(private readonly chatReports: ChatReportsService) {}
+
+  @ApiOperation({
+    summary: 'Reported conversations, newest first',
+    description:
+      'The queue only — who reported which chat and why. No message text: reading a thread is the separate call below.',
+  })
+  @Get()
+  list(@Query() query: AdminReportsQueryDto) {
+    return this.chatReports.adminList(query);
+  }
+
+  @ApiOperation({
+    summary: 'One report, with the conversation transcript',
+    description:
+      'The only path to chat messages in the whole API. It takes a REPORT id, never a conversation id, so a conversation nobody reported cannot be opened. Deleted messages keep their place in the thread but not their text.',
+  })
+  @Get(':id')
+  get(@Param('id', ParseUUIDPipe) id: string) {
+    return this.chatReports.adminGet(id);
+  }
+
+  @ApiOperation({ summary: 'Resolve or dismiss a chat report' })
+  @Patch(':id/status')
+  setStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AdminReportStatusDto,
+  ) {
+    return this.chatReports.setStatus(id, dto);
   }
 }

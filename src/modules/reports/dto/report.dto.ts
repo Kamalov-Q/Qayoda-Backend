@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   IsIn,
+  IsUUID,
   IsInt,
   IsOptional,
   IsString,
@@ -9,8 +10,12 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { REPORT_REASONS, REPORT_STATUSES } from '../reports.constants';
-import type { ReportReason } from '../reports.constants';
+import {
+  CHAT_REPORT_REASONS,
+  REPORT_REASONS,
+  REPORT_STATUSES,
+} from '../reports.constants';
+import type { ChatReportReason, ReportReason } from '../reports.constants';
 import type { ReportStatus } from '../report.entity';
 
 const trim = ({ value }: { value: unknown }) =>
@@ -58,4 +63,29 @@ export class AdminReportStatusDto {
   @ApiProperty({ enum: REPORT_STATUSES })
   @IsIn(REPORT_STATUSES)
   status: ReportStatus;
+}
+
+export class CreateChatReportDto {
+  @ApiProperty({ enum: CHAT_REPORT_REASONS, example: 'SCAM' })
+  @IsIn(CHAT_REPORT_REASONS)
+  reason: ChatReportReason;
+
+  @ApiPropertyOptional({
+    maxLength: 500,
+    description: 'Required when reason is OTHER, optional otherwise.',
+  })
+  @Transform(trim)
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  comment?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'The message that prompted the report, when it was sent from one. Context for the moderator; the whole thread is shown either way.',
+  })
+  @IsOptional()
+  @IsUUID('4')
+  messageId?: string;
 }

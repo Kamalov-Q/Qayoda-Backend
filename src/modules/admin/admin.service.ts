@@ -13,6 +13,7 @@ import { ListingsFacade } from '../listings/listings.facade';
 import { UpdateListingDto } from '../listings/dto/update-listing.dto';
 import { TokenService } from '../auth/services/token.service';
 import { ReportsService } from '../reports/reports.service';
+import { ChatReportsService } from '../reports/chat-reports.service';
 import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
 import { UserRole, UserStatus } from '../../shared/enums';
 import { AdminListingsQueryDto, AdminUsersQueryDto } from './dto/admin-query.dto';
@@ -38,6 +39,7 @@ export class AdminService {
     private readonly listingsFacade: ListingsFacade,
     private readonly tokens: TokenService,
     private readonly reportsService: ReportsService,
+    private readonly chatReportsService: ChatReportsService,
   ) {}
 
   async overview() {
@@ -54,6 +56,7 @@ export class AdminService {
       newListings,
       listingsByCategory,
       openReports,
+      openChatReports,
     ] = await Promise.all([
       this.users.count(),
       this.users.count({ where: { role: UserRole.ADMIN } }),
@@ -67,6 +70,7 @@ export class AdminService {
         .getCount(),
       this.countByCategory(),
       this.reportsService.openCount(),
+      this.chatReportsService.openCount(),
     ]);
 
     return {
@@ -79,6 +83,7 @@ export class AdminService {
         byCategory: listingsByCategory,
       },
       reports: { open: openReports },
+      chatReports: { open: openChatReports },
     };
   }
 

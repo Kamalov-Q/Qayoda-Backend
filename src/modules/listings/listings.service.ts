@@ -162,7 +162,46 @@ export class ListingsService {
   async findById(id: string) {
     const listing = await this.listings.findWithRelations(id);
     if (!listing) throw new NotFoundException('Listing not found');
-    return listing;
+    return { ...listing, owner: await this.ownerCard(listing.ownerId) };
+  }
+
+  /**
+   * The seller, as the listing page shows them: a name to trust, a face, and
+   * how long they have been here. Served with the listing because that page is
+   * public — GET /users/:id needs a session, so a signed-out visitor could not
+   * fetch it separately, and it would be a second request for everyone else.
+   *
+   * Deliberately less than the full profile: no email, no phone (the listing
+   * carries its own contact number), nothing an owner has not already put on
+   * the listing itself.
+   */
+  private async ownerCard(ownerId: string) {
+    const [owner] = await this.dataSource.query<
+      {
+        id: string;
+        name: string | null;
+        surname: string | null;
+        avatar_url: string | null;
+        avatar_thumb_url: string | null;
+        is_verified_realtor: boolean;
+        created_at: Date;
+      }[]
+    >(
+      `SELECT id, name, surname, avatar_url, avatar_thumb_url,
+              is_verified_realtor, created_at
+       FROM users WHERE id = $1 AND deleted_at IS NULL`,
+      [ownerId],
+    );
+    if (!owner) return null;
+    return {
+      id: owner.id,
+      name: owner.name,
+      surname: owner.surname,
+      avatarUrl: owner.avatar_url,
+      avatarThumbUrl: owner.avatar_thumb_url,
+      isVerifiedRealtor: owner.is_verified_realtor,
+      createdAt: owner.created_at,
+    };
   }
 
   findMine(ownerId: string, limit?: number, offset?: number) {

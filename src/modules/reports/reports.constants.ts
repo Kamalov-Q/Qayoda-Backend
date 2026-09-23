@@ -23,3 +23,21 @@ export const REPORT_REASONS = [
 export type ReportReason = (typeof REPORT_REASONS)[number];
 
 export const REPORT_STATUSES = ['OPEN', 'RESOLVED', 'DISMISSED'] as const;
+
+/**
+ * Why a conversation can be reported. Different list from listings: a chat is
+ * flagged for how someone behaves in it, not for what a listing claims.
+ */
+export const CHAT_REPORT_REASONS = [
+  /** Unsolicited advertising, repeated spam. */
+  'SPAM',
+  /** Scam attempt: advance payment, fake deposit, phishing. */
+  'SCAM',
+  /** Insults, threats, harassment. */
+  'HARASSMENT',
+  /** Offensive or explicit content. */
+  'INAPPROPRIATE',
+  /** Anything else — requires the free-text comment. */
+  'OTHER',
+] as const;
+export type ChatReportReason = (typeof CHAT_REPORT_REASONS)[number];
