@@ -249,8 +249,17 @@ export class ListingsService {
     );
   }
 
-  findPublicByOwner(ownerId: string) {
-    return this.listings.findPublicByOwner(ownerId);
+  /** One page of a user's live listings; 50 per page is the ceiling. */
+  findPublicByOwner(ownerId: string, limit?: number, offset?: number) {
+    return this.listings.findPublicByOwner(
+      ownerId,
+      limit ? Math.min(limit, 50) : undefined,
+      offset,
+    );
+  }
+
+  countPublicByOwner(ownerId: string) {
+    return this.listings.countPublicByOwner(ownerId);
   }
 
   // ---- Saved listings ------------------------------------------------------

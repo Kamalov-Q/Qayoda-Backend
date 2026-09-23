@@ -3,6 +3,7 @@ import {
   Get,
   Param,
   ParseUUIDPipe,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -18,6 +19,7 @@ import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
 import { ErrorResponse } from 'src/shared/responses/error.response';
 import { UsersService } from './users.service';
 import { UserProfileResponse } from './responses/public-user.response';
+import { OwnerListingsQueryDto } from './dto/owner-listings.query.dto';
 
 @ApiTags('Users')
 @ApiBearerAuth('access-token')
@@ -49,5 +51,19 @@ export class UsersController {
   @Get(':id')
   getProfile(@Param('id', ParseUUIDPipe) id: string) {
     return this.users.getProfileWithListings(id);
+  }
+
+  @ApiOperation({
+    summary: "One page of a user's listings",
+    description:
+      'The profile card above carries the first 20 and the real total; this serves the rest as the reader scrolls. Live listings only, newest first.',
+  })
+  @ApiParam({ name: 'id', type: String, format: 'uuid', description: 'User id.' })
+  @Get(':id/listings')
+  getListings(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: OwnerListingsQueryDto,
+  ) {
+    return this.users.findListingsByOwner(id, query.limit, query.offset);
   }
 }

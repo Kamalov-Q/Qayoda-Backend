@@ -132,11 +132,22 @@ export class ListingRepository extends Repository<Listing> {
   }
 
   /** Same as `findMine`, minus the drafts and archived rows only the owner may see. */
-  findPublicByOwner(ownerId: string) {
+  /**
+   * One page of someone's live listings. Paged because this feeds a profile
+   * screen on a phone: an agency with 200 ads would otherwise ship all of
+   * them, with every offer and image row, in a single response.
+   */
+  findPublicByOwner(ownerId: string, limit = 20, offset = 0) {
     return this.find({
       where: { ownerId, status: ListingStatus.ACTIVE },
       relations: { offers: true, images: true },
       order: { createdAt: 'DESC' },
+      take: limit,
+      skip: offset,
     });
+  }
+
+  countPublicByOwner(ownerId: string) {
+    return this.countBy({ ownerId, status: ListingStatus.ACTIVE });
   }
 }

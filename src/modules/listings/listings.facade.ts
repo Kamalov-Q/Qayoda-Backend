@@ -25,8 +25,12 @@ export class ListingsFacade {
     };
   }
 
-  findPublicByOwner(ownerId: string) {
-    return this.listingsService.findPublicByOwner(ownerId);
+  findPublicByOwner(ownerId: string, limit?: number, offset?: number) {
+    return this.listingsService.findPublicByOwner(ownerId, limit, offset);
+  }
+
+  countPublicByOwner(ownerId: string) {
+    return this.listingsService.countPublicByOwner(ownerId);
   }
 
   async getSummaries(listingIds: string[]) {

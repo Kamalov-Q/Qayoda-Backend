@@ -115,16 +115,28 @@ export class UsersService {
   }
 
   /** Everything the profile screen shows in one call: who they are, and their ads. */
+  /** How many of someone's ads the profile screen opens with. */
+  private static readonly PROFILE_PAGE = 20;
+
   async getProfileWithListings(userId: string) {
-    // The card 404s on an unknown id, so the listings query is only ever used
-    // for a user that exists — but both are in flight before that is known,
-    // which costs nothing on the miss and saves a round trip on the hit.
-    const [user, listings] = await Promise.all([
+    // The card 404s on an unknown id, so the listings queries are only ever
+    // used for a user that exists — but all are in flight before that is
+    // known, which costs nothing on the miss and saves round trips on the hit.
+    const [user, listings, listingCount] = await Promise.all([
       this.getUserCard(userId),
-      this.listings.findPublicByOwner(userId),
+      this.listings.findPublicByOwner(userId, UsersService.PROFILE_PAGE),
+      this.listings.countPublicByOwner(userId),
     ]);
 
-    return { ...user, listings, listingCount: listings.length };
+    // `listings` is the first page only; `listingCount` is the real total, so
+    // the screen can say "12 e'lon" while holding 20 of them, and fetch the
+    // rest through GET /users/:id/listings as the reader scrolls.
+    return { ...user, listings, listingCount };
+  }
+
+  /** A page of someone's live listings, for scrolling past the first. */
+  findListingsByOwner(userId: string, limit?: number, offset?: number) {
+    return this.listings.findPublicByOwner(userId, limit, offset);
   }
 
   async getPublicProfiles(userIds: string[]): Promise<PublicProfileResponse[]> {
