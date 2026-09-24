@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   ForbiddenException,
   HttpException,
   Injectable,
@@ -14,6 +15,7 @@ import * as bcrypt from 'bcrypt';
 import { AuthProvider, UserStatus } from 'src/shared/enums';
 import { User } from 'src/modules/users/entities/user.entity';
 import { PhoneOtpCode } from '../entities/phone-otp-code.entity';
+import { AuthIdentity } from '../entities/auth-identity.entity';
 import { EskizService } from '../../notifications/eskiz.service';
 import { IdentityService } from './identity.service';
 import { TokenService } from './token.service';
@@ -123,6 +125,52 @@ export class PhoneAuthService {
     }
 
     return { ...(await this.tokens.issuePair(user)), isNew };
+  }
+
+  /**
+   * The SMS half of linking, gated on the number actually being linkable.
+   *
+   * The check has to happen here rather than at verify: an SMS costs money
+   * and the sender's patience, and telling someone their number is taken
+   * only after they have waited for a code and typed it is a worse way to
+   * learn it. `link()` still repeats the check — this is an early exit, not
+   * the authority, and between the two calls someone else can claim it.
+   */
+  async linkPhoneRequest(
+    userId: string,
+    rawPhone: string,
+    lang: 'uz' | 'ru' = 'uz',
+  ) {
+    const phone = EskizService.normalizePhone(rawPhone);
+    const identities = this.ds.getRepository(AuthIdentity);
+
+    const [owner, own] = await Promise.all([
+      identities.findOne({
+        where: { provider: AuthProvider.PHONE, providerId: phone },
+      }),
+      identities.findOne({
+        where: { userId, provider: AuthProvider.PHONE },
+      }),
+    ]);
+
+    if (own) {
+      throw new ConflictException({
+        code: 'PROVIDER_ALREADY_LINKED',
+        message: "Hisobingizga allaqachon raqam bog'langan",
+      });
+    }
+    // Its own code, not IDENTITY_TAKEN: "that account belongs to someone
+    // else" is the wording for a Google or Telegram account, and a person
+    // staring at their own phone number deserves to be told it is the
+    // NUMBER that is spoken for.
+    if (owner) {
+      throw new ConflictException({
+        code: 'PHONE_TAKEN',
+        message: "Bu raqam boshqa hisobga bog'langan",
+      });
+    }
+
+    return this.requestOtp(rawPhone, lang);
   }
 
   /**

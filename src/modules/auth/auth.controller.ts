@@ -238,15 +238,15 @@ export class AuthController {
   @ApiOperation({
     summary: 'Send an SMS code to link a phone number',
     description:
-      'For an account that signed in with Telegram or Google and has no number yet. Same code, cooldown and hourly budget as `POST /auth/phone/request` — only the verify step differs.',
+      'For an account that signed in with Telegram or Google and has no number yet. Same code, cooldown and hourly budget as `POST /auth/phone/request`. Refuses before spending an SMS when the number already belongs to another account (409 PHONE_TAKEN) or this one already has a number (409 PROVIDER_ALREADY_LINKED).',
   })
   @ApiBearerAuth('access-token')
   @Post('link/phone/request')
   @UseGuards(JwtAccessGuard)
   @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
   @HttpCode(200)
-  linkPhoneRequest(@Body() dto: RequestOtpDto) {
-    return this.phone.requestOtp(dto.phone, dto.lang);
+  linkPhoneRequest(@CurrentUser() user: AuthUser, @Body() dto: RequestOtpDto) {
+    return this.phone.linkPhoneRequest(user.sub, dto.phone, dto.lang);
   }
 
   @ApiOperation({
