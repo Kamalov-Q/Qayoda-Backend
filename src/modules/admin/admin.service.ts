@@ -234,6 +234,8 @@ export class AdminService {
         areaM2: l.areaM2,
         createdAt: l.createdAt,
         publishedAt: l.publishedAt,
+        ratingAvg: l.ratingAvg,
+        ratingCount: l.ratingCount,
         offers: l.offers?.map((o) => ({
           purpose: o.purpose,
           price: o.price,

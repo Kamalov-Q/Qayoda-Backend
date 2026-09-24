@@ -87,6 +87,23 @@ export class Listing {
   })
   centroid: GeoJsonPoint | null;
 
+  /**
+   * Denormalized from `listing_reviews`, recomputed by ReviewsService after
+   * every write. They live here so that stars cost nothing to show: every
+   * feed, card, profile and saved-list query already selects this entity, and
+   * a LATERAL aggregate on each of them would be a join per card.
+   *
+   * `real`, not `numeric`: node-postgres hands float4 back as a JS number,
+   * while numeric arrives as a string (see `areaM2`). Averaging five integers
+   * does not need more precision than that.
+   */
+  @Column({ name: 'rating_avg', type: 'real', nullable: true })
+  ratingAvg: number | null;
+
+  /** How many people rated it. 0 means "no reviews", never "rated zero". */
+  @Column({ name: 'rating_count', type: 'int', default: 0 })
+  ratingCount: number;
+
   @OneToMany(() => ListingOffer, (o) => o.listing, { cascade: true })
   offers: ListingOffer[];
   @OneToMany(() => ListingImage, (i) => i.listing, { cascade: true })
