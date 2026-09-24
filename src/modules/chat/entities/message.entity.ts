@@ -56,6 +56,24 @@ export class Message {
   @Column({ name: 'reply_to_id', type: 'varchar', nullable: true })
   replyToId: string | null;
 
+  // ---- forward provenance (null unless this message was forwarded) ----
+  /** Who originally wrote it. Kept for linking through to their profile. */
+  @Column({ name: 'forwarded_from_user_id', type: 'uuid', nullable: true })
+  forwardedFromUserId: string | null;
+
+  /**
+   * Their name at the time of forwarding, snapshotted rather than joined.
+   * A forward is a quotation: it has to keep saying who said it even after
+   * that account is deleted, which a join cannot do.
+   */
+  @Column({
+    name: 'forwarded_from_name',
+    type: 'varchar',
+    length: 120,
+    nullable: true,
+  })
+  forwardedFromName: string | null;
+
   // ---- edit audit: who, when, how many times, what it said before ----
   @Column({ name: 'edited_at', type: 'timestamptz', nullable: true })
   editedAt: Date | null;

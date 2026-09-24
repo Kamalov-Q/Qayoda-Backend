@@ -1,4 +1,5 @@
 import {
+  HttpCode,
   Body,
   Controller,
   Delete,
@@ -26,6 +27,11 @@ import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
 import { PhoneRequiredGuard } from '../auth/guards/phone-required.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ChatService } from './chat.service';
+import { ChatGateway } from './chat.gateway';
+import {
+  ForwardMessageDto,
+  PinMessageDto,
+} from './dto/ws-events.dto';
 import { StartConversationDto } from './dto/start-conversation.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 import { EditMessageDto } from './dto/edit-message.dto';
@@ -81,7 +87,12 @@ const NO_CONVERSATION = {
 @UseGuards(JwtAccessGuard)
 @Controller('chat')
 export class ChatController {
-  constructor(private readonly chatService: ChatService) {}
+  constructor(
+    private readonly chatService: ChatService,
+    // Only to push the pin to the other participant — a pin nobody else sees
+    // until they reload is a note to yourself.
+    private readonly gateway: ChatGateway,
+  ) {}
 
   @ApiOperation({
     summary: 'List your conversations',
@@ -219,6 +230,41 @@ export class ChatController {
   @ApiCreatedResponse({ type: ReadReceiptResponse })
   @ApiForbiddenResponse(NOT_PARTICIPANT)
   @ApiNotFoundResponse(NO_CONVERSATION)
+  @ApiOperation({
+    summary: 'Forward a message into this conversation',
+    description:
+      "Copies the message — text, photo, voice, video or file — and keeps the original author's name on it. You must be in both conversations: this is a share, not a way to post into a thread you are not part of. A forward of a forward keeps the first author, the same as Telegram.",
+  })
+  @Post('conversations/:id/forward')
+  forward(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ForwardMessageDto,
+  ) {
+    return this.chatService.forwardMessage(id, user.sub, dto.messageId);
+  }
+
+  @ApiOperation({
+    summary: 'Pin a message, or clear the pin',
+    description:
+      'One pin per conversation. Either participant may set it — a two-person thread has no owner. Send no `messageId` to clear.',
+  })
+  @Post('conversations/:id/pin')
+  @HttpCode(200)
+  async pin(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: PinMessageDto,
+  ) {
+    const result = await this.chatService.setPinned(
+      id,
+      user.sub,
+      dto.messageId ?? null,
+    );
+    this.gateway.emitPinned(result);
+    return result;
+  }
+
   @Post('conversations/:id/read')
   markRead(
     @CurrentUser() user: AuthUser,

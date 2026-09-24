@@ -37,6 +37,21 @@ export class WsSendMessageDto extends SendMessageDto {
   conversationId: string;
 }
 
+export class ForwardMessageDto {
+  @ApiProperty({ description: 'The message being passed on.' })
+  @IsUUID()
+  messageId: string;
+}
+
+export class PinMessageDto {
+  @ApiPropertyOptional({
+    description: 'The message to pin. Omit or send null to clear the pin.',
+  })
+  @IsOptional()
+  @IsUUID()
+  messageId?: string | null;
+}
+
 export class WsConversationDto {
   @ApiProperty(CONVERSATION_ID)
   @IsUUID()

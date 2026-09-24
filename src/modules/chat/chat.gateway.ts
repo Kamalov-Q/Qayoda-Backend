@@ -135,6 +135,24 @@ export class ChatGateway
   }
 
   // ============ events ============
+  /**
+   * A pin changed. Pushed to both sides: the bar at the top of the thread is
+   * shared state, and one participant seeing yesterday's pin is worse than
+   * no pin at all.
+   */
+  emitPinned(payload: {
+    conversationId: string;
+    pinnedMessageId: string | null;
+    otherId: string;
+  }) {
+    try {
+      this.server.to(`user:${payload.otherId}`).emit('conversation:pin', payload);
+    } catch (e) {
+      // A pin must not fail to save because a socket could not be told.
+      this.logger.warn(`Pin broadcast failed: ${(e as Error).message}`);
+    }
+  }
+
   @SubscribeMessage('message:send')
   async onSend(
     @ConnectedSocket() client: ChatSocket,

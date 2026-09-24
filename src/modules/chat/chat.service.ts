@@ -156,6 +156,13 @@ export class ChatService {
     conversationId: string,
     senderId: string,
     dto: SendMessageDto,
+    /**
+     * Who originally said this, when the message is a forward. A separate
+     * argument rather than a DTO field on purpose: attribution is decided by
+     * the server from the source message, and a client that could set it
+     * could put anyone's name on anything.
+     */
+    forwardedFrom?: { userId: string | null; name: string | null },
   ) {
     const conv = await this.assertParticipant(conversationId, senderId);
     const recipientId = this.otherPartyOf(conv, senderId);
@@ -197,6 +204,8 @@ export class ChatService {
           height: dto.height ?? null,
           waveform: dto.waveform ?? null,
           replyToId: dto.replyToId ?? null,
+          forwardedFromUserId: forwardedFrom?.userId ?? null,
+          forwardedFromName: forwardedFrom?.name ?? null,
           clientId: dto.clientId ?? null,
           status: MessageStatus.SENT,
         }),
@@ -217,6 +226,126 @@ export class ChatService {
     });
 
     return this.toMessageDto(saved);
+  }
+
+  /**
+   * Forward a message into another conversation.
+   *
+   * The content is copied rather than referenced. A forward has to keep
+   * working when the original is deleted — and in a marketplace the original
+   * often is, because the listing it belonged to got archived.
+   *
+   * The caller must be in both conversations: this is a share, not a way to
+   * inject a message into a thread you are not part of.
+   */
+  async forwardMessage(
+    targetConversationId: string,
+    senderId: string,
+    messageId: string,
+  ) {
+    const source = await this.readForwardable(messageId, senderId);
+
+    return this.sendMessage(
+      targetConversationId,
+      senderId,
+      {
+        type: source.message.type,
+        body: source.message.body ?? undefined,
+        mediaUrl: source.message.mediaUrl ?? undefined,
+        thumbUrl: source.message.thumbUrl ?? undefined,
+        fileName: source.message.fileName ?? undefined,
+        fileSize: source.message.fileSize
+          ? Number(source.message.fileSize)
+          : undefined,
+        mimeType: source.message.mimeType ?? undefined,
+        durationSec: source.message.durationSec ?? undefined,
+        width: source.message.width ?? undefined,
+        height: source.message.height ?? undefined,
+        waveform: source.message.waveform ?? undefined,
+      },
+      { userId: source.authorId, name: source.authorName },
+    );
+  }
+
+  /**
+   * A message the caller is allowed to forward, with its author's name
+   * snapshotted. Shared by chat-to-chat forwarding and by support, which
+   * needs the same permission check and the same attribution.
+   */
+  async readForwardable(messageId: string, userId: string) {
+    const message = await this.messages.findOneBy({ id: messageId });
+    if (!message) throw new NotFoundException('Message not found');
+
+    // Being in the conversation is the permission: you may pass on what was
+    // said to you, and nothing else.
+    await this.assertParticipant(message.conversationId, userId);
+
+    if (message.deletedAt) {
+      throw new BadRequestException({
+        code: 'MESSAGE_DELETED',
+        message: 'A deleted message cannot be forwarded',
+      });
+    }
+
+    // Already-forwarded messages keep their original attribution rather than
+    // claiming the person who passed them on — the same as Telegram, and the
+    // only reading that stays true after three hops.
+    if (message.forwardedFromName) {
+      return {
+        message,
+        authorId: message.forwardedFromUserId,
+        authorName: message.forwardedFromName,
+      };
+    }
+
+    const [author] = await this.dataSource.query<
+      { name: string | null; surname: string | null }[]
+    >(`SELECT name, surname FROM users WHERE id = $1`, [message.senderId]);
+
+    const authorName =
+      [author?.name, author?.surname].filter(Boolean).join(' ') || null;
+
+    return { message, authorId: message.senderId, authorName };
+  }
+
+  /**
+   * Pin a message, or clear the pin with a null id.
+   *
+   * Either participant may pin in a private thread — there is no owner of a
+   * two-person conversation, and asking one of them to be the one who pins
+   * would be a rule with no reason behind it.
+   */
+  async setPinned(
+    conversationId: string,
+    userId: string,
+    messageId: string | null,
+  ) {
+    const conv = await this.assertParticipant(conversationId, userId);
+
+    if (messageId) {
+      const target = await this.messages.findOneBy({
+        id: messageId,
+        conversationId,
+      });
+      if (!target || target.deletedAt) {
+        throw new BadRequestException('Invalid pin target');
+      }
+    }
+
+    await this.conversations.update(conversationId, {
+      pinnedMessageId: messageId,
+    });
+
+    return {
+      conversationId,
+      pinnedMessageId: messageId,
+      pinnedMessage: messageId
+        ? this.toMessageDto(
+            (await this.messages.findOneByOrFail({ id: messageId })),
+          )
+        : null,
+      otherId: this.otherPartyOf(conv, userId),
+    };
   }
 
   async listMessages(
@@ -433,6 +562,10 @@ export class ChatService {
       height: m.height,
       waveform: m.waveform,
       replyToId: m.replyToId,
+      // Null on an ordinary message; the client draws the "forwarded from"
+      // line only when there is a name to draw.
+      forwardedFromUserId: m.forwardedFromUserId,
+      forwardedFromName: m.forwardedFromName,
       editedAt: m.editedAt,
       editedBy: m.editedBy,
       editCount: m.editCount,

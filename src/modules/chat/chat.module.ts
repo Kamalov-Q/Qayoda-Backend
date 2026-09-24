@@ -31,6 +31,6 @@ import { WsJwtGuard } from './guards/ws-jwt.guard';
     ChatFacade,
     WsJwtGuard,
   ],
-  exports: [ChatFacade],
+  exports: [ChatFacade, ChatService],
 })
 export class ChatModule {}

@@ -19,6 +19,7 @@ import { ReportsModule } from './modules/reports/reports.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { CommentsModule } from './modules/comments/comments.module';
 import { ViewsModule } from './modules/views/views.module';
+import { SupportModule } from './modules/support/support.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { ViewsModule } from './modules/views/views.module';
     ReviewsModule,
     CommentsModule,
     ViewsModule,
+    SupportModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
