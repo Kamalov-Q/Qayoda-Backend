@@ -8,6 +8,7 @@ import { CommentsService } from './comments.service';
 import {
   AdminCommentsController,
   CommentsController,
+  MyCommentsController,
 } from './comments.controller';
 
 /**
@@ -25,7 +26,11 @@ import {
     ]),
     AuthModule,
   ],
-  controllers: [CommentsController, AdminCommentsController],
+  controllers: [
+    CommentsController,
+    MyCommentsController,
+    AdminCommentsController,
+  ],
   providers: [CommentsService],
   exports: [CommentsService],
 })

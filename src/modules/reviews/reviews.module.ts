@@ -7,6 +7,7 @@ import { User } from '../users/entities/user.entity';
 import { ReviewsService } from './reviews.service';
 import {
   AdminReviewsController,
+  MyReviewsController,
   ReviewsController,
 } from './reviews.controller';
 
@@ -20,7 +21,11 @@ import {
     TypeOrmModule.forFeature([ListingReview, Listing, User]),
     AuthModule,
   ],
-  controllers: [ReviewsController, AdminReviewsController],
+  controllers: [
+    ReviewsController,
+    MyReviewsController,
+    AdminReviewsController,
+  ],
   providers: [ReviewsService],
   exports: [ReviewsService],
 })

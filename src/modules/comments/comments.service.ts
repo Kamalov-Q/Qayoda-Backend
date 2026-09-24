@@ -22,6 +22,12 @@ const DEFAULT_LIMIT = 20;
  *  the exchange; the rest come from the replies endpoint on demand. */
 const REPLY_PREVIEW = 2;
 
+export interface ListingCard {
+  id: string;
+  title: string | null;
+  thumbUrl: string | null;
+}
+
 export interface CommentAuthor {
   id: string;
   name: string | null;
@@ -235,6 +241,71 @@ export class CommentsService {
     return { success: true };
   }
 
+  /**
+   * One comment in its context, for the dashboard: the thread it belongs to,
+   * the listing it is under, and who liked it.
+   *
+   * A moderator deciding whether a line is abuse needs what it was answering
+   * — on its own, "unchalikmas manimcha" is unreadable either way.
+   */
+  async adminGet(commentId: string) {
+    const comment = await this.comments.findOneBy({ id: commentId });
+    if (!comment) throw new NotFoundException('Comment not found');
+
+    // The root of the thread: this comment when it is top-level, otherwise
+    // the one it replies to.
+    const root = comment.parentId
+      ? await this.comments.findOneBy({ id: comment.parentId })
+      : comment;
+
+    const siblings = root
+      ? await this.comments.find({
+          where: { parentId: root.id },
+          order: { createdAt: 'ASC' },
+        })
+      : [];
+
+    const thread = [root, ...siblings].filter(
+      (c): c is ListingComment => !!c,
+    );
+
+    const [authors, listings, likers] = await Promise.all([
+      this.authorMap(thread.map((c) => c.authorId)),
+      this.listingCards([comment.listingId]),
+      this.likersOf(commentId),
+    ]);
+
+    return {
+      ...this.shape(comment, authors, new Set()),
+      listing: listings.get(comment.listingId) ?? null,
+      isReply: !!comment.parentId,
+      /** Root first, then every reply — the whole exchange, in order. */
+      thread: thread.map((c) => ({
+        ...this.shape(c, authors, new Set()),
+        isReply: !!c.parentId,
+        /** Which row of the thread the moderator clicked. */
+        isSelected: c.id === commentId,
+      })),
+      likedBy: likers,
+    };
+  }
+
+  /** Who hearted one comment, most recent first. Capped: the list is context,
+   *  not a dataset, and a viral comment should not ship 4,000 names. */
+  private async likersOf(commentId: string) {
+    const likes = await this.likes.find({
+      where: { commentId },
+      order: { createdAt: 'DESC' },
+      take: 20,
+    });
+    if (!likes.length) return [];
+
+    const users = await this.authorMap(likes.map((l) => l.userId));
+    return likes
+      .map((l) => users.get(l.userId))
+      .filter((u): u is CommentAuthor => !!u);
+  }
+
   /** Moderator removal from the dashboard — any comment, no ownership test. */
   async adminRemove(commentId: string) {
     const comment = await this.comments.findOneBy({ id: commentId });
@@ -292,6 +363,78 @@ export class CommentsService {
     return { liked, likeCount: fresh.likeCount };
   }
 
+  /**
+   * "Your activity": the comments this person has written, newest first, each
+   * carrying enough of its listing to be a row you can tap back into.
+   *
+   * Replies are included — from the author's side a reply is something they
+   * said, and a list that quietly dropped half of their own words would be
+   * wrong about what they did.
+   */
+  async myComments(userId: string, q: CommentsQueryDto) {
+    const limit = q.limit ?? DEFAULT_LIMIT;
+    const offset = q.offset ?? 0;
+
+    const [rows, total] = await this.comments.findAndCount({
+      where: { authorId: userId },
+      order: { createdAt: 'DESC' },
+      take: limit,
+      skip: offset,
+    });
+
+    return this.asActivity(rows, userId, total);
+  }
+
+  /** The comments this person has hearted, most recently hearted first. */
+  async myLikedComments(userId: string, q: CommentsQueryDto) {
+    const limit = q.limit ?? DEFAULT_LIMIT;
+    const offset = q.offset ?? 0;
+
+    // Ordered by when the LIKE happened, not when the comment was written —
+    // this is a list of things you did, and its order should be yours.
+    const [likes, total] = await this.likes.findAndCount({
+      where: { userId },
+      order: { createdAt: 'DESC' },
+      take: limit,
+      skip: offset,
+    });
+
+    if (!likes.length) return { total, items: [] };
+
+    const found = await this.comments.find({
+      where: { id: In(likes.map((l) => l.commentId)) },
+    });
+    // find() loses the order; the likes are the sequence to follow.
+    const byId = new Map(found.map((c) => [c.id, c]));
+    const rows = likes
+      .map((l) => byId.get(l.commentId))
+      .filter((c): c is ListingComment => !!c);
+
+    return this.asActivity(rows, userId, total);
+  }
+
+  /** Shared tail of both activity lists: authors, likes and listing cards. */
+  private async asActivity(
+    rows: ListingComment[],
+    viewerId: string,
+    total: number,
+  ) {
+    const [authors, liked, listings] = await Promise.all([
+      this.authorMap(rows.map((c) => c.authorId)),
+      this.likedSet(viewerId, rows.map((c) => c.id)),
+      this.listingCards(rows.map((c) => c.listingId)),
+    ]);
+
+    return {
+      total,
+      items: rows.map((c) => ({
+        ...this.shape(c, authors, liked),
+        listing: listings.get(c.listingId) ?? null,
+        isReply: !!c.parentId,
+      })),
+    };
+  }
+
   /** The dashboard's table: every comment, newest first, hydrated. */
   async adminList(q: CommentsQueryDto) {
     const limit = q.limit ?? DEFAULT_LIMIT;
@@ -321,6 +464,39 @@ export class CommentsService {
         isReply: !!c.parentId,
       })),
     };
+  }
+
+  /**
+   * Just enough of a listing to render an activity row: what it was called
+   * and what it looked like. One keyed read plus one for the cover photos —
+   * the same shape the admin listing table uses, and for the same reason.
+   */
+  private async listingCards(listingIds: string[]) {
+    const unique = [...new Set(listingIds)];
+    if (!unique.length) {
+      return new Map<string, ListingCard>();
+    }
+
+    const listings = await this.listings.find({
+      where: { id: In(unique) },
+      select: { id: true, title: true },
+      relations: { images: true },
+    });
+
+    return new Map<string, ListingCard>(
+      listings.map((l) => {
+        const cover =
+          l.images?.find((i) => i.isPrimary) ?? l.images?.[0] ?? null;
+        return [
+          l.id,
+          {
+            id: l.id,
+            title: l.title,
+            thumbUrl: cover?.thumbUrl ?? cover?.url ?? null,
+          },
+        ];
+      }),
+    );
   }
 
   /** A comment and everything hanging off it, in one transaction. */

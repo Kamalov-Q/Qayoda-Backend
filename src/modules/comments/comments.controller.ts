@@ -139,6 +139,40 @@ export class CommentsController {
   }
 }
 
+/**
+ * "Your activity" — the signed-in person's own trail through the app. Its own
+ * controller because these are keyed by the caller, not by a listing: there
+ * is no id in the path, and there is deliberately no way to ask for anyone
+ * else's.
+ */
+@ApiTags('Me')
+@ApiBearerAuth('access-token')
+@Controller('me')
+@UseGuards(JwtAccessGuard)
+export class MyCommentsController {
+  constructor(private readonly comments: CommentsService) {}
+
+  @ApiOperation({
+    summary: 'Comments you have written',
+    description:
+      'Newest first, replies included — from your side a reply is still something you said. Each row carries its listing.',
+  })
+  @Get('comments')
+  mine(@CurrentUser() user: AuthUser, @Query() query: CommentsQueryDto) {
+    return this.comments.myComments(user.sub, query);
+  }
+
+  @ApiOperation({
+    summary: 'Comments you have liked',
+    description:
+      'Ordered by when you liked them, not by when they were written — this is a list of things you did.',
+  })
+  @Get('comment-likes')
+  liked(@CurrentUser() user: AuthUser, @Query() query: CommentsQueryDto) {
+    return this.comments.myLikedComments(user.sub, query);
+  }
+}
+
 @ApiTags('Admin')
 @ApiBearerAuth()
 @Controller('admin/comments')
@@ -151,6 +185,16 @@ export class AdminCommentsController {
   @Get()
   list(@Query() query: CommentsQueryDto) {
     return this.comments.adminList(query);
+  }
+
+  @ApiOperation({
+    summary: 'One comment in its thread',
+    description:
+      'The comment, the whole exchange it belongs to (root first, replies in order, the clicked one flagged), its listing, and up to 20 of the people who liked it.',
+  })
+  @Get(':commentId')
+  get(@Param('commentId', ParseUUIDPipe) commentId: string) {
+    return this.comments.adminGet(commentId);
   }
 
   @ApiOperation({

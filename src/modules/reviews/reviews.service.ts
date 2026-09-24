@@ -126,6 +126,53 @@ export class ReviewsService {
   }
 
   /**
+   * "Your activity": the reviews this person has written, newest first, each
+   * with enough of its listing to tap back into.
+   */
+  async myReviews(userId: string, q: ReviewsQueryDto) {
+    const limit = q.limit ?? DEFAULT_LIMIT;
+    const offset = q.offset ?? 0;
+
+    const [rows, total] = await this.reviews.findAndCount({
+      where: { authorId: userId },
+      order: { createdAt: 'DESC' },
+      take: limit,
+      skip: offset,
+    });
+
+    const listings = rows.length
+      ? await this.listings.find({
+          where: { id: In([...new Set(rows.map((r) => r.listingId))]) },
+          select: { id: true, title: true },
+          relations: { images: true },
+        })
+      : [];
+
+    const cards = new Map(
+      listings.map((l) => {
+        const cover =
+          l.images?.find((i) => i.isPrimary) ?? l.images?.[0] ?? null;
+        return [
+          l.id,
+          {
+            id: l.id,
+            title: l.title,
+            thumbUrl: cover?.thumbUrl ?? cover?.url ?? null,
+          },
+        ];
+      }),
+    );
+
+    return {
+      total,
+      items: rows.map((r) => ({
+        ...this.shape(r, null),
+        listing: cards.get(r.listingId) ?? null,
+      })),
+    };
+  }
+
+  /**
    * The dashboard's table. Hydrated with the listing and the author in two
    * keyed reads — the same shape as the reports queue, and for the same
    * reason: joins do not survive take/skip cleanly.

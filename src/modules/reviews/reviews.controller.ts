@@ -79,6 +79,23 @@ export class ReviewsController {
   }
 }
 
+@ApiTags('Me')
+@ApiBearerAuth('access-token')
+@Controller('me')
+@UseGuards(JwtAccessGuard)
+export class MyReviewsController {
+  constructor(private readonly reviews: ReviewsService) {}
+
+  @ApiOperation({
+    summary: 'Reviews you have written',
+    description: 'Newest first, each with the listing it is about.',
+  })
+  @Get('reviews')
+  mine(@CurrentUser() user: AuthUser, @Query() query: ReviewsQueryDto) {
+    return this.reviews.myReviews(user.sub, query);
+  }
+}
+
 @ApiTags('Admin')
 @ApiBearerAuth()
 @Controller('admin/reviews')

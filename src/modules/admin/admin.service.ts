@@ -236,6 +236,7 @@ export class AdminService {
         publishedAt: l.publishedAt,
         ratingAvg: l.ratingAvg,
         ratingCount: l.ratingCount,
+        viewCount: l.viewCount,
         offers: l.offers?.map((o) => ({
           purpose: o.purpose,
           price: o.price,

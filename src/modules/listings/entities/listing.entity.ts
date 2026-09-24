@@ -104,6 +104,14 @@ export class Listing {
   @Column({ name: 'rating_count', type: 'int', default: 0 })
   ratingCount: number;
 
+  /**
+   * Distinct viewers, denormalized from `listing_views` the same way the
+   * rating is: every feed and card query already selects this entity, so the
+   * number costs nothing to show and a COUNT per card would cost a lot.
+   */
+  @Column({ name: 'view_count', type: 'int', default: 0 })
+  viewCount: number;
+
   @OneToMany(() => ListingOffer, (o) => o.listing, { cascade: true })
   offers: ListingOffer[];
   @OneToMany(() => ListingImage, (i) => i.listing, { cascade: true })
