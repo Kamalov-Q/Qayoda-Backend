@@ -9,6 +9,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
 
 const trim = ({ value }: { value: unknown }) =>
@@ -17,13 +18,45 @@ const trim = ({ value }: { value: unknown }) =>
 /** Long enough for a real question, short enough to read in a thread. */
 export const COMMENT_MAX_LENGTH = 1000;
 
-export class CreateCommentDto {
-  @ApiProperty({ maxLength: COMMENT_MAX_LENGTH })
-  @Transform(trim)
+/** The photo half of a comment, as `POST /media/upload` returns it. */
+export class CommentImageDto {
+  @ApiProperty()
   @IsString()
-  @IsNotEmpty()
+  url: string;
+
+  @ApiProperty()
+  @IsString()
+  thumbUrl: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  width?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  height?: number;
+}
+
+export class CreateCommentDto {
+  @ApiPropertyOptional({
+    maxLength: COMMENT_MAX_LENGTH,
+    description: 'Optional when `image` is sent — a photo is a comment too.',
+  })
+  @Transform(trim)
+  @IsOptional()
+  @IsString()
   @MaxLength(COMMENT_MAX_LENGTH)
-  body: string;
+  body?: string;
+
+  @ApiPropertyOptional({ type: CommentImageDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CommentImageDto)
+  image?: CommentImageDto;
 
   @ApiPropertyOptional({
     description:

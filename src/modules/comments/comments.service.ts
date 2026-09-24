@@ -141,13 +141,26 @@ export class CommentsService {
       }
     }
 
+    const body = dto.body?.trim() ?? '';
+    // A photo on its own is a comment; nothing at all is not.
+    if (!body && !dto.image) {
+      throw new BadRequestException({
+        code: 'COMMENT_EMPTY',
+        message: 'Write something or attach a photo',
+      });
+    }
+
     const saved = await this.ds.transaction(async (m) => {
       const comment = await m.save(
         m.create(ListingComment, {
           listingId,
           authorId,
           parentId: dto.parentId ?? null,
-          body: dto.body,
+          body,
+          imageUrl: dto.image?.url ?? null,
+          imageThumbUrl: dto.image?.thumbUrl ?? null,
+          imageWidth: dto.image?.width ?? null,
+          imageHeight: dto.image?.height ?? null,
         }),
       );
       if (dto.parentId) {
@@ -175,6 +188,8 @@ export class CommentsService {
       });
     }
 
+    // Words only: swapping the photo under an edit would let a comment people
+    // already replied to become a different comment entirely.
     await this.comments.update(commentId, {
       body: dto.body,
       updatedAt: new Date(),
@@ -401,6 +416,10 @@ export class CommentsService {
       parentId: comment.parentId,
       authorId: comment.authorId,
       body: comment.body,
+      imageUrl: comment.imageUrl,
+      imageThumbUrl: comment.imageThumbUrl,
+      imageWidth: comment.imageWidth,
+      imageHeight: comment.imageHeight,
       likeCount: comment.likeCount,
       replyCount: comment.replyCount,
       likedByMe: liked.has(comment.id),

@@ -30,7 +30,27 @@ export class ListingComment {
   @Column({ name: 'parent_id', type: 'uuid', nullable: true })
   parentId: string | null;
 
+  /** May be empty when the comment is a photo — see `imageUrl`. */
   @Column({ type: 'text' }) body: string;
+
+  /**
+   * One optional photo, uploaded through `POST /media/upload` before the
+   * comment is created. Stored as the returned URLs rather than as a
+   * relation: the media module already owns the file, and a comment only
+   * needs to know where it is.
+   */
+  @Column({ name: 'image_url', type: 'text', nullable: true })
+  imageUrl: string | null;
+
+  @Column({ name: 'image_thumb_url', type: 'text', nullable: true })
+  imageThumbUrl: string | null;
+
+  /** Kept so the thread can reserve the right space before the photo loads. */
+  @Column({ name: 'image_width', type: 'int', nullable: true })
+  imageWidth: number | null;
+
+  @Column({ name: 'image_height', type: 'int', nullable: true })
+  imageHeight: number | null;
 
   /**
    * Denormalized, maintained by the service. A thread is read far more often

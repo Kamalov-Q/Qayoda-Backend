@@ -37,6 +37,13 @@ CREATE INDEX IF NOT EXISTS "IDX_8abfbb6e0d7d6f1d82b97ac315"
 CREATE INDEX IF NOT EXISTS "IDX_cf12d5dc90a725ca4daf7056a9"
   ON listing_comments (parent_id);
 
+-- The optional photo. Separate ALTERs so a database that already ran an
+-- earlier version of this file picks them up on a re-run.
+ALTER TABLE listing_comments ADD COLUMN IF NOT EXISTS image_url       text;
+ALTER TABLE listing_comments ADD COLUMN IF NOT EXISTS image_thumb_url text;
+ALTER TABLE listing_comments ADD COLUMN IF NOT EXISTS image_width     integer;
+ALTER TABLE listing_comments ADD COLUMN IF NOT EXISTS image_height    integer;
+
 -- One heart per person per comment: the pair IS the primary key, so a double
 -- tap conflicts instead of counting twice.
 CREATE TABLE IF NOT EXISTS listing_comment_likes (
