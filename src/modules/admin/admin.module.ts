@@ -3,6 +3,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
 import { ListingsModule } from '../listings/listings.module';
 import { ReportsModule } from '../reports/reports.module';
+import { RatesModule } from '../../shared/rates/rates.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { User } from '../users/entities/user.entity';
 import { Listing } from '../listings/entities/listing.entity';
 import { AdminController } from './admin.controller';
@@ -16,7 +18,16 @@ import { AdminSeedService } from './admin-seed.service';
  * counts across everything.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([User, Listing]), AuthModule, ListingsModule, ReportsModule],
+  imports: [
+    TypeOrmModule.forFeature([User, Listing]),
+    AuthModule,
+    ListingsModule,
+    ReportsModule,
+    // Both only for GET /admin/system: the rate the app prices with, and the
+    // SMS balance that every phone login depends on.
+    RatesModule,
+    NotificationsModule,
+  ],
   controllers: [AdminController],
   providers: [AdminService, AdminSeedService],
 })

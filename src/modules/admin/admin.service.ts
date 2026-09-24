@@ -14,6 +14,8 @@ import { UpdateListingDto } from '../listings/dto/update-listing.dto';
 import { TokenService } from '../auth/services/token.service';
 import { ReportsService } from '../reports/reports.service';
 import { ChatReportsService } from '../reports/chat-reports.service';
+import { RatesService } from '../../shared/rates/rates.service';
+import { EskizService } from '../notifications/eskiz.service';
 import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
 import { UserRole, UserStatus } from '../../shared/enums';
 import { AdminListingsQueryDto, AdminUsersQueryDto } from './dto/admin-query.dto';
@@ -40,7 +42,39 @@ export class AdminService {
     private readonly tokens: TokenService,
     private readonly reportsService: ReportsService,
     private readonly chatReportsService: ChatReportsService,
+    private readonly rates: RatesService,
+    private readonly eskiz: EskizService,
   ) {}
+
+  /**
+   * The two live numbers an operator actually needs to see, plus the server's
+   * own clock.
+   *
+   * The SMS balance is the important one: at zero, every phone login in the
+   * country stops working, and the only warning today is a line in yesterday's
+   * log. Fetched per request rather than cached — it is read by one person
+   * opening one page, and a stale number here is worse than a slow one.
+   */
+  async system() {
+    const rate = this.rates.current();
+
+    let smsBalance: number | null = null;
+    let smsError: string | null = null;
+    try {
+      smsBalance = await this.eskiz.getBalance();
+    } catch (e) {
+      // A provider outage must not take the settings page down with it.
+      smsError = (e as Error).message;
+    }
+
+    return {
+      usdToUzs: rate.usdToUzs,
+      rateUpdatedAt: rate.updatedAt,
+      smsBalance,
+      smsError,
+      serverTime: new Date().toISOString(),
+    };
+  }
 
   async overview() {
     const since = new Date(Date.now() - WEEK_MS);

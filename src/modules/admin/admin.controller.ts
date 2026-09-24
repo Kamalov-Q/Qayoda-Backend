@@ -48,6 +48,16 @@ export class AdminController {
     return this.admin.overview();
   }
 
+  @ApiOperation({
+    summary: 'Live system numbers',
+    description:
+      "The CBU rate the app prices with, the Eskiz SMS balance (null with `smsError` set when the provider cannot be reached), and the server's clock.",
+  })
+  @Get('system')
+  system() {
+    return this.admin.system();
+  }
+
   @ApiOperation({ summary: 'Users, newest first' })
   @Get('users')
   users(@Query() query: AdminUsersQueryDto) {
