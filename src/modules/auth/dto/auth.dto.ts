@@ -60,6 +60,17 @@ export class VerifyOtpDto extends LocalizedDto {
   name?: string;
 }
 
+export class LinkPhoneDto {
+  @ApiProperty({ example: '+998901234567' })
+  @Transform(stripSeparators)
+  @Matches(PHONE, { message: PHONE_MESSAGE })
+  phone: string;
+
+  @ApiProperty({ example: '123456', description: 'The 6 digits from the SMS.' })
+  @Matches(/^\d{6}$/)
+  code: string;
+}
+
 export class CheckPhoneDto {
   @ApiProperty({ example: '+998901234567' })
   @Transform(stripSeparators)

@@ -14,6 +14,8 @@ interface AccountState {
   deletedAt: Date | null;
   banReason: string | null;
   banExpiresAt: Date | null;
+  /** Whether a verified phone is on the account — see PhoneRequiredGuard. */
+  hasPhone: boolean;
   cachedAt: number;
 }
 
@@ -23,6 +25,7 @@ interface AccountRow {
   deleted_at: Date | null;
   ban_reason: string | null;
   ban_expires_at: Date | null;
+  phone_number: string | null;
 }
 
 /**
@@ -87,7 +90,7 @@ export class JwtAccessGuard extends AuthGuard('jwt') {
     if (hit && Date.now() - hit.cachedAt < this.TTL_MS) return hit;
 
     const rows = await ds.query<AccountRow[]>(
-      `SELECT status, role, deleted_at, ban_reason, ban_expires_at
+      `SELECT status, role, deleted_at, ban_reason, ban_expires_at, phone_number
          FROM users
         WHERE id = $1`,
       [userId],
@@ -100,13 +103,26 @@ export class JwtAccessGuard extends AuthGuard('jwt') {
       deletedAt: rows[0].deleted_at,
       banReason: rows[0].ban_reason,
       banExpiresAt: rows[0].ban_expires_at,
+      hasPhone: !!rows[0].phone_number,
       cachedAt: Date.now(),
     };
     this.cache.set(userId, state);
     return state;
   }
 
-  /** Call from ban / unban / role-change so the change takes effect at once. */
+  /**
+   * Does this account have a verified phone? Answered from the same cached
+   * row this guard already reads, so the phone gate costs no extra query.
+   *
+   * Public and static so PhoneRequiredGuard can ask without depending on
+   * guard ordering or on what the previous guard left on the request.
+   */
+  static async hasPhone(ds: DataSource, userId: string): Promise<boolean> {
+    return (await this.getState(ds, userId)).hasPhone;
+  }
+
+  /** Call from ban / unban / role-change / phone-link so the change takes
+   *  effect at once. */
   static invalidate(userId: string): void {
     this.cache.delete(userId);
   }

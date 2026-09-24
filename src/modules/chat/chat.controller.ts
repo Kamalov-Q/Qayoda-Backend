@@ -23,6 +23,7 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
+import { PhoneRequiredGuard } from '../auth/guards/phone-required.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ChatService } from './chat.service';
 import { StartConversationDto } from './dto/start-conversation.dto';
@@ -119,6 +120,11 @@ export class ChatController {
     type: ErrorResponse,
     description: 'No listing exists with this id.',
   })
+  // Phone gate: this is one of the actions other people have to live with,
+  // so it needs an account answerable at a verified number. Telegram/Google
+  // sign-ins without one get 403 PHONE_REQUIRED and the app opens the
+  // add-a-number flow.
+  @UseGuards(PhoneRequiredGuard)
   @Post('conversations')
   start(@CurrentUser() user: AuthUser, @Body() dto: StartConversationDto) {
     return this.chatService.startConversation(

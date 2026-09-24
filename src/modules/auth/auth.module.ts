@@ -13,6 +13,7 @@ import { TokenService } from './services/token.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtAccessGuard } from './guards/jwt-access.guard';
 import { OptionalJwtGuard } from './guards/optional-jwt.guard';
+import { PhoneRequiredGuard } from './guards/phone-required.guard';
 import { AuthController } from './auth.controller';
 import { TelegramWebhookController } from './telegram-webhook.controller';
 import { AuthIdentity } from './entities/auth-identity.entity';
@@ -52,7 +53,14 @@ import { RefreshToken } from './entities/refresh-token.entity';
     JwtStrategy,
     JwtAccessGuard,
     OptionalJwtGuard,
+    PhoneRequiredGuard,
   ],
-  exports: [TokenService, IdentityService, JwtAccessGuard, OptionalJwtGuard],
+  exports: [
+    TokenService,
+    IdentityService,
+    JwtAccessGuard,
+    OptionalJwtGuard,
+    PhoneRequiredGuard,
+  ],
 })
 export class AuthModule {}

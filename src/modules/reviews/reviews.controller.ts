@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
+import { PhoneRequiredGuard } from '../auth/guards/phone-required.guard';
 import { OptionalJwtGuard } from '../auth/guards/optional-jwt.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthUser } from '../auth/types/auth-user.type';
@@ -49,7 +50,11 @@ export class ReviewsController {
       'One review per person per listing: calling this again replaces the one you left, so the client does not need a separate edit call. Owners cannot review their own listing (403 OWN_LISTING). `rating` is 1–5; `comment` is optional.',
   })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAccessGuard)
+  // Phone gate: this is one of the actions other people have to live with,
+  // so it needs an account answerable at a verified number. Telegram/Google
+  // sign-ins without one get 403 PHONE_REQUIRED and the app opens the
+  // add-a-number flow.
+  @UseGuards(JwtAccessGuard, PhoneRequiredGuard)
   @Put('mine')
   upsert(
     @CurrentUser() user: AuthUser,

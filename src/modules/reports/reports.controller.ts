@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
+import { PhoneRequiredGuard } from '../auth/guards/phone-required.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthUser } from '../auth/types/auth-user.type';
 import { Roles, RolesGuard } from '../../shared/guards/roles.guard';
@@ -35,7 +36,11 @@ export class ReportsController {
       'Flags the listing for the moderators with one of the fixed reasons; `comment` is required for OTHER, optional otherwise. One report per user per listing — a second attempt returns ALREADY_REPORTED. Owners cannot report their own listing.',
   })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAccessGuard)
+  // Phone gate: this is one of the actions other people have to live with,
+  // so it needs an account answerable at a verified number. Telegram/Google
+  // sign-ins without one get 403 PHONE_REQUIRED and the app opens the
+  // add-a-number flow.
+  @UseGuards(JwtAccessGuard, PhoneRequiredGuard)
   @Post(':id/report')
   report(
     @CurrentUser() user: AuthUser,
@@ -84,6 +89,11 @@ export class ChatReportsController {
     description:
       "Flags the chat for the moderators. Only its two participants may report it, once each — a second attempt returns ALREADY_REPORTED. `comment` is required for OTHER; `messageId` optionally pins the message that prompted it. This report is also what lets a moderator read the thread: unreported conversations are not readable by anyone but the participants.",
   })
+  // Phone gate: this is one of the actions other people have to live with,
+  // so it needs an account answerable at a verified number. Telegram/Google
+  // sign-ins without one get 403 PHONE_REQUIRED and the app opens the
+  // add-a-number flow.
+  @UseGuards(PhoneRequiredGuard)
   @Post(':id/report')
   report(
     @CurrentUser() user: AuthUser,

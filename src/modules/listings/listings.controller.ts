@@ -26,6 +26,7 @@ import {
 } from '@nestjs/swagger';
 import { ListingsService } from './listings.service';
 import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
+import { PhoneRequiredGuard } from '../auth/guards/phone-required.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { CreateListingDto } from './dto/create-listing.dto';
 import { ListingOwnershipGuard } from './guards/listing-ownership.guard';
@@ -76,7 +77,11 @@ export class ListingsController {
   })
   @ApiUnauthorizedResponse({ type: ErrorResponse })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAccessGuard)
+  // Phone gate: this is one of the actions other people have to live with,
+  // so it needs an account answerable at a verified number. Telegram/Google
+  // sign-ins without one get 403 PHONE_REQUIRED and the app opens the
+  // add-a-number flow.
+  @UseGuards(JwtAccessGuard, PhoneRequiredGuard)
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateListingDto) {
     return this.listingsService.create(user.sub, dto);

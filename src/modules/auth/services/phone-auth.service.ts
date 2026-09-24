@@ -17,6 +17,7 @@ import { PhoneOtpCode } from '../entities/phone-otp-code.entity';
 import { EskizService } from '../../notifications/eskiz.service';
 import { IdentityService } from './identity.service';
 import { TokenService } from './token.service';
+import { JwtAccessGuard } from '../guards/jwt-access.guard';
 
 const OTP_TTL_MS = 5 * 60_000;
 const RESEND_COOLDOWN_MS = 60_000;
@@ -122,6 +123,35 @@ export class PhoneAuthService {
     }
 
     return { ...(await this.tokens.issuePair(user)), isNew };
+  }
+
+  /**
+   * Attach a phone to the account already holding the session — the way a
+   * Telegram or Google user gets a number without a second account.
+   *
+   * The SMS half is plain `requestOtp`: it is the same code, the same rate
+   * limits and the same budget. Only the verify differs, because this must
+   * link rather than sign in — `verifyOtp` would resolve the number to
+   * whichever account already owns it, which for a linking user is either
+   * nobody or somebody else.
+   */
+  async linkPhone(userId: string, rawPhone: string, code: string) {
+    const phone = EskizService.normalizePhone(rawPhone);
+    await this.consumeCode(phone, code);
+
+    const identity = await this.identities.link(userId, {
+      provider: AuthProvider.PHONE,
+      providerId: phone,
+      // The OTP is the proof; this is what writes users.phone_number.
+      verifiedPhone: phone,
+    });
+
+    // Without this the account keeps its cached "no phone" for up to 30s and
+    // the action that sent them here still fails — which reads as the link
+    // not having worked.
+    JwtAccessGuard.invalidate(userId);
+
+    return identity;
   }
 
   /**

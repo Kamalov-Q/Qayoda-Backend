@@ -28,6 +28,7 @@ import { IdentityService } from './services/identity.service';
 import { TokenService } from './services/token.service';
 import {
   CheckPhoneDto,
+  LinkPhoneDto,
   GoogleSignInDto,
   PhoneLoginDto,
   RefreshDto,
@@ -232,6 +233,34 @@ export class AuthController {
   @UseGuards(JwtAccessGuard)
   list(@CurrentUser() user: AuthUser) {
     return this.identities.listFor(user.sub);
+  }
+
+  @ApiOperation({
+    summary: 'Send an SMS code to link a phone number',
+    description:
+      'For an account that signed in with Telegram or Google and has no number yet. Same code, cooldown and hourly budget as `POST /auth/phone/request` — only the verify step differs.',
+  })
+  @ApiBearerAuth('access-token')
+  @Post('link/phone/request')
+  @UseGuards(JwtAccessGuard)
+  @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
+  @HttpCode(200)
+  linkPhoneRequest(@Body() dto: RequestOtpDto) {
+    return this.phone.requestOtp(dto.phone, dto.lang);
+  }
+
+  @ApiOperation({
+    summary: 'Confirm the code and attach the number',
+    description:
+      'Adds PHONE as a way into the account you are signed in as, and stores the number on the profile. Conflicts (409 IDENTITY_TAKEN) if the number already belongs to someone else, or (409 PROVIDER_ALREADY_LINKED) if this account already has one.',
+  })
+  @ApiBearerAuth('access-token')
+  @Post('link/phone/verify')
+  @UseGuards(JwtAccessGuard)
+  @Throttle({ default: { limit: 10, ttl: 600_000 } })
+  @HttpCode(200)
+  linkPhoneVerify(@CurrentUser() user: AuthUser, @Body() dto: LinkPhoneDto) {
+    return this.phone.linkPhone(user.sub, dto.phone, dto.code);
   }
 
   @ApiOperation({

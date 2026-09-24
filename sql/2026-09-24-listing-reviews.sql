@@ -25,9 +25,29 @@ CREATE TABLE IF NOT EXISTS listing_reviews (
   CONSTRAINT uq_review_listing_author UNIQUE (listing_id, author_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_listing_reviews_listing_id
+-- For a database that already ran an earlier version of this file: rename
+-- rather than rebuild. Wrapped, because on a fresh database there is nothing
+-- to rename and ALTER INDEX has no IF EXISTS.
+DO $$
+BEGIN
+  ALTER INDEX idx_listing_reviews_listing_id
+    RENAME TO "IDX_cbdfc8dbe363ec2fe5dd3558cd";
+EXCEPTION WHEN undefined_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER INDEX idx_listing_reviews_author_id
+    RENAME TO "IDX_fef7a4c01639adae321a26c00a";
+EXCEPTION WHEN undefined_object THEN NULL;
+END $$;
+
+-- The names are TypeORM's own, not readable ones: @Index() derives a hash
+-- from table + column, and an index under any other name makes `schema:sql`
+-- report a permanent DROP/CREATE pair that drowns out real drift.
+CREATE INDEX IF NOT EXISTS "IDX_cbdfc8dbe363ec2fe5dd3558cd"
   ON listing_reviews (listing_id);
-CREATE INDEX IF NOT EXISTS idx_listing_reviews_author_id
+CREATE INDEX IF NOT EXISTS "IDX_fef7a4c01639adae321a26c00a"
   ON listing_reviews (author_id);
 
 -- The aggregate every card reads, so stars cost no extra query.
