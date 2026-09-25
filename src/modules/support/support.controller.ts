@@ -150,6 +150,17 @@ export class AdminSupportController {
     return this.support.adminWaitingCount();
   }
 
+  @ApiOperation({
+    summary: "Open (or start) a thread with one person",
+    description:
+      'Returns their thread, creating it if they have never written. This is how the desk starts a conversation instead of only answering one.',
+  })
+  @Post('by-user/:userId')
+  @HttpCode(200)
+  byUser(@Param('userId', ParseUUIDPipe) userId: string) {
+    return this.support.adminThreadFor(userId);
+  }
+
   @ApiOperation({ summary: 'One thread with its transcript' })
   @Get(':threadId')
   get(@Param('threadId', ParseUUIDPipe) threadId: string) {

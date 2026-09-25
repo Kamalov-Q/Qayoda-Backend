@@ -344,6 +344,22 @@ export class SupportService {
     return { ...this.shapeThread({ ...thread, pinnedMessageId: messageId }) };
   }
 
+  /**
+   * The thread for one person, created if they have never written.
+   *
+   * This is what lets the desk open a conversation rather than only answer
+   * one — a moderator who has just read somebody's record often needs to ask
+   * them something, and making them wait for the customer to write first
+   * would be a strange rule.
+   */
+  async adminThreadFor(userId: string) {
+    const existing = await this.threads.findOne({ where: { userId } });
+    if (existing) return this.shapeThread(existing);
+
+    const created = await this.threads.save(this.threads.create({ userId }));
+    return this.shapeThread(created);
+  }
+
   /** The caller's own thread id, for the pin route on the user side. */
   async threadIdOf(userId: string) {
     const thread = await this.threads.findOne({
