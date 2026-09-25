@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import { BlocksService } from '../blocks/blocks.service';
 import { OutBoxService } from 'src/shared/events/outbox.service';
 import { ListingsFacade } from '../listings/listings.facade';
 import { User } from './entities/user.entity';
@@ -22,6 +23,7 @@ export class UsersService {
     private readonly listings: ListingsFacade,
     private readonly outbox: OutBoxService,
     private readonly dataSource: DataSource,
+    private readonly blocks: BlocksService,
   ) {}
 
   // ------------------------------------------------------------- own profile
@@ -117,6 +119,36 @@ export class UsersService {
   /** Everything the profile screen shows in one call: who they are, and their ads. */
   /** How many of someone's ads the profile screen opens with. */
   private static readonly PROFILE_PAGE = 20;
+
+  /**
+   * The public profile, as the viewer is allowed to see it.
+   *
+   * A block hides presence and the phone number in BOTH directions: from the
+   * person who was blocked, because that is what blocking is for, and from
+   * the person who blocked them, because they asked not to be shown this
+   * account. The name and listings stay — the adverts are public whatever
+   * the two of them think of each other.
+   */
+  async getProfileWithListingsFor(userId: string, viewerId: string | null) {
+    const profile = await this.getProfileWithListings(userId);
+
+    const [blockedByMe, blockedEitherWay] = viewerId
+      ? await Promise.all([
+          this.blocks.hasBlocked(viewerId, userId),
+          this.blocks.betweenAny(viewerId, userId),
+        ])
+      : [false, false];
+
+    if (!blockedEitherWay) return { ...profile, blockedByMe };
+
+    return {
+      ...profile,
+      phoneNumber: null,
+      isOnline: false,
+      lastSeenAt: null,
+      blockedByMe,
+    };
+  }
 
   async getProfileWithListings(userId: string) {
     // The card 404s on an unknown id, so the listings queries are only ever

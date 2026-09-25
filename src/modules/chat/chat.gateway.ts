@@ -17,6 +17,7 @@ import {
 import { Server } from 'socket.io';
 import type { ChatSocket } from './types/chat-socket';
 import { ChatService } from './chat.service';
+import { BlocksService } from '../blocks/blocks.service';
 import { ConversationRepository } from './repositories/conversation.repository';
 import { UsersFacade } from '../users/users.facade';
 import { JwtService } from '@nestjs/jwt';
@@ -53,6 +54,7 @@ export class ChatGateway
     private readonly users: UsersFacade,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly blocks: BlocksService,
   ) {}
 
   async onModuleInit() {
@@ -124,9 +126,29 @@ export class ChatGateway
     const counterpartIds = await this.conversations.findCounterpartIds(userId);
 
     for (const id of counterpartIds) {
-      if (this.sockets.has(id)) {
-        this.server.to(`user:${id}`).emit('presence', payload);
-      }
+      if (!this.sockets.has(id)) continue;
+
+      // Presence is the first thing a block has to stop leaking: "last seen"
+      // is exactly the detail people block someone to withhold. Checked per
+      // recipient rather than once, because the block may be in either
+      // direction and only concerns that one pair.
+      if (await this.blocks.betweenAny(userId, id)) continue;
+
+      this.server.to(`user:${id}`).emit('presence', payload);
+    }
+  }
+
+  /**
+   * A block changed. Sent to the blocker's own devices only — the other
+   * person is not told, which is the whole point, and their client finds out
+   * the same way it would anyway: presence stops arriving and the next
+   * message is refused.
+   */
+  emitBlockChanged(blockerId: string, payload: unknown) {
+    try {
+      this.server.to(`user:${blockerId}`).emit('user:block', payload);
+    } catch (e) {
+      this.logger.warn(`Block broadcast failed: ${(e as Error).message}`);
     }
   }
 

@@ -16,6 +16,8 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import type { AuthUser } from '../auth/types/auth-user.type';
 import { ErrorResponse } from 'src/shared/responses/error.response';
 import { UsersService } from './users.service';
 import { UserProfileResponse } from './responses/public-user.response';
@@ -49,8 +51,11 @@ export class UsersController {
     description: 'No user exists with this id.',
   })
   @Get(':id')
-  getProfile(@Param('id', ParseUUIDPipe) id: string) {
-    return this.users.getProfileWithListings(id);
+  getProfile(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.users.getProfileWithListingsFor(id, user.sub);
   }
 
   @ApiOperation({

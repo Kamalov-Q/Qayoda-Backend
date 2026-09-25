@@ -9,6 +9,7 @@ import { MessageRepository } from './repositories/message.repository';
 import { ListingsFacade } from '../listings/listings.facade';
 import { UsersFacade } from '../users/users.facade';
 import { OutBoxService } from 'src/shared/events/outbox.service';
+import { BlocksService } from '../blocks/blocks.service';
 import { DataSource } from 'typeorm';
 import { SendMessageDto } from './dto/send-message.dto';
 import { Conversation } from './entities/conversation.entity';
@@ -28,6 +29,7 @@ export class ChatService {
     private readonly listings: ListingsFacade,
     private readonly users: UsersFacade,
     private readonly outbox: OutBoxService,
+    private readonly blocks: BlocksService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -43,6 +45,10 @@ export class ChatService {
         'You cannot start a conversation with yourself',
       );
     }
+
+    // Either direction: a blocked buyer cannot open a thread with the seller,
+    // and a seller the buyer has blocked cannot be written to either.
+    await this.blocks.assertNotBlocked(guestId, listing.ownerId);
 
     const existing = await this.conversations.findByListingAndGuest(
       listingId,
@@ -166,6 +172,11 @@ export class ChatService {
   ) {
     const conv = await this.assertParticipant(conversationId, senderId);
     const recipientId = this.otherPartyOf(conv, senderId);
+
+    // Checked on every message, not only when the thread opens: a block can
+    // land mid-conversation, and the point of it is that the next message
+    // does not arrive.
+    await this.blocks.assertNotBlocked(senderId, recipientId);
 
     if (dto.clientId) {
       const dup = await this.messages.findByClientId(
