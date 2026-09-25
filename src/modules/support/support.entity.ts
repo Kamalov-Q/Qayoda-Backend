@@ -49,6 +49,14 @@ export class SupportThread {
   @Column({ name: 'admin_read_at', type: 'timestamptz', nullable: true })
   adminReadAt: Date | null;
 
+  /**
+   * The message kept at the top of the thread. One per thread, like a chat:
+   * a support conversation has one thing worth pinning — the order number,
+   * the address, the answer that resolved it.
+   */
+  @Column({ name: 'pinned_message_id', type: 'uuid', nullable: true })
+  pinnedMessageId: string | null;
+
   /** Unread counts per side, so neither has to count rows to draw a badge. */
   @Column({ name: 'user_unread', type: 'int', default: 0 }) userUnread: number;
   @Column({ name: 'admin_unread', type: 'int', default: 0 })
@@ -129,6 +137,10 @@ export class SupportMessage {
   /** Kept alongside the name so the attribution can open their profile. */
   @Column({ name: 'forwarded_from_user_id', type: 'uuid', nullable: true })
   forwardedFromUserId: string | null;
+
+  /** The message this answers, within the same thread. */
+  @Column({ name: 'reply_to_id', type: 'uuid', nullable: true })
+  replyToId: string | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' }) createdAt: Date;
 }

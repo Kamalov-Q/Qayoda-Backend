@@ -380,6 +380,90 @@ export class AdminService {
   }
 
   /** The same row shape findUsers() returns, for mutation responses. */
+  /**
+   * One person, with everything the dashboard can tell about them.
+   *
+   * The counts come from one grouped query per table rather than a join:
+   * these are five unrelated tables keyed by the same id, and a join across
+   * them multiplies rows before it counts them.
+   *
+   * Nothing private is included — no chat contents, no saved listings. A
+   * moderator deciding whether to ban somebody needs their record, not their
+   * correspondence, and the chat rules elsewhere in this API say the same.
+   */
+  async getUser(id: string) {
+    const user = await this.userRow(id);
+
+    const [listings, reviews, comments, reportsAgainst, reportsBy, identities] =
+      await Promise.all([
+        this.listings.query<{ status: string; count: string }[]>(
+          `SELECT status, COUNT(*)::text AS count
+             FROM listings WHERE owner_id = $1 GROUP BY status`,
+          [id],
+        ),
+        this.listings.query<{ count: string; avg: string | null }[]>(
+          `SELECT COUNT(*)::text AS count, AVG(rating)::text AS avg
+             FROM listing_reviews WHERE author_id = $1`,
+          [id],
+        ),
+        this.listings.query<{ count: string }[]>(
+          `SELECT COUNT(*)::text AS count
+             FROM listing_comments WHERE author_id = $1`,
+          [id],
+        ),
+        // Reports about this person's listings — the number that matters when
+        // the question is whether to trust them.
+        this.listings.query<{ count: string }[]>(
+          `SELECT COUNT(*)::text AS count
+             FROM listing_reports r
+             JOIN listings l ON l.id = r.listing_id
+            WHERE l.owner_id = $1`,
+          [id],
+        ),
+        this.listings.query<{ count: string }[]>(
+          `SELECT COUNT(*)::text AS count
+             FROM listing_reports WHERE reporter_id = $1`,
+          [id],
+        ),
+        this.listings.query<{ provider: string; created_at: Date }[]>(
+          `SELECT provider, created_at FROM auth_identities WHERE user_id = $1`,
+          [id],
+        ),
+      ]);
+
+    const byStatus = new Map(listings.map((r) => [r.status, Number(r.count)]));
+    const totalViews = await this.listings.query<{ sum: string | null }[]>(
+      `SELECT SUM(view_count)::text AS sum FROM listings WHERE owner_id = $1`,
+      [id],
+    );
+
+    return {
+      ...user,
+      listings: {
+        total: [...byStatus.values()].reduce((a, b) => a + b, 0),
+        active: byStatus.get('ACTIVE') ?? 0,
+        draft: byStatus.get('DRAFT') ?? 0,
+        archived: byStatus.get('ARCHIVED') ?? 0,
+        // How many people have opened their adverts, all told.
+        views: Number(totalViews[0]?.sum ?? 0),
+      },
+      reviewsWritten: {
+        count: Number(reviews[0]?.count ?? 0),
+        average: reviews[0]?.avg ? Number(Number(reviews[0].avg).toFixed(1)) : null,
+      },
+      commentsWritten: Number(comments[0]?.count ?? 0),
+      reports: {
+        against: Number(reportsAgainst[0]?.count ?? 0),
+        filed: Number(reportsBy[0]?.count ?? 0),
+      },
+      /** How they can sign in — phone, Google, Telegram. */
+      identities: identities.map((i) => ({
+        provider: i.provider,
+        linkedAt: i.created_at,
+      })),
+    };
+  }
+
   private async userRow(id: string) {
     const u = await this.users.findOneBy({ id });
     if (!u) throw new NotFoundException('User not found');

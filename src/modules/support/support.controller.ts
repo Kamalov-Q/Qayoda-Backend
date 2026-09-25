@@ -21,6 +21,7 @@ import { SupportGateway } from './support.gateway';
 import { ChatService } from '../chat/chat.service';
 import {
   ForwardToSupportDto,
+  PinSupportDto,
   SendSupportMessageDto,
   SupportQueryDto,
   SupportStatusDto,
@@ -100,6 +101,20 @@ export class SupportController {
     return message;
   }
 
+  @ApiOperation({
+    summary: 'Pin a message in your support thread, or clear the pin',
+    description:
+      'One pin per thread, shared with the desk — either side may set it. Send no `messageId` to clear.',
+  })
+  @Post('pin')
+  @HttpCode(200)
+  async pin(@CurrentUser() user: AuthUser, @Body() dto: PinSupportDto) {
+    const threadId = await this.support.threadIdOf(user.sub);
+    const thread = await this.support.setPinned(threadId, dto.messageId ?? null);
+    this.gateway.emitThread(user.sub, thread);
+    return thread;
+  }
+
   @ApiOperation({ summary: "Mark support's answers as read" })
   @Post('read')
   @HttpCode(200)
@@ -168,6 +183,21 @@ export class AdminSupportController {
     @Body() dto: SupportStatusDto,
   ) {
     const thread = await this.support.adminSetStatus(threadId, dto);
+    this.gateway.emitThread(thread.userId, thread);
+    return thread;
+  }
+
+  @ApiOperation({
+    summary: 'Pin a message in a thread, or clear the pin',
+    description: 'The same pin the customer sees — one per thread.',
+  })
+  @Post(':threadId/pin')
+  @HttpCode(200)
+  async pin(
+    @Param('threadId', ParseUUIDPipe) threadId: string,
+    @Body() dto: PinSupportDto,
+  ) {
+    const thread = await this.support.setPinned(threadId, dto.messageId ?? null);
     this.gateway.emitThread(thread.userId, thread);
     return thread;
   }

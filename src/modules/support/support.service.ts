@@ -320,7 +320,38 @@ export class SupportService {
       mimeType: dto.mimeType ?? null,
       durationSec: dto.durationSec ?? null,
       waveform: dto.waveform ?? null,
+      replyToId: dto.replyToId ?? null,
     };
+  }
+
+  /**
+   * Pin a message in a thread, or clear the pin with a null id.
+   *
+   * Either side may set it. The customer pinning the answer they needed and
+   * the desk pinning the question they are working on are the same feature,
+   * and a rule about who may would be a rule with no reason behind it.
+   */
+  async setPinned(threadId: string, messageId: string | null) {
+    const thread = await this.threads.findOneBy({ id: threadId });
+    if (!thread) throw new NotFoundException('Thread not found');
+
+    if (messageId) {
+      const target = await this.messages.findOneBy({ id: messageId, threadId });
+      if (!target) throw new BadRequestException('Invalid pin target');
+    }
+
+    await this.threads.update(threadId, { pinnedMessageId: messageId });
+    return { ...this.shapeThread({ ...thread, pinnedMessageId: messageId }) };
+  }
+
+  /** The caller's own thread id, for the pin route on the user side. */
+  async threadIdOf(userId: string) {
+    const thread = await this.threads.findOne({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!thread) throw new NotFoundException('Thread not found');
+    return thread.id;
   }
 
   private async transcript(threadId: string) {
@@ -373,6 +404,7 @@ export class SupportService {
       userId: t.userId,
       status: t.status,
       lastMessageAt: t.lastMessageAt,
+      pinnedMessageId: t.pinnedMessageId,
       // A message is "read" when the other side's read stamp is later than
       // it — one timestamp per side rather than a flag per message.
       userReadAt: t.userReadAt,
@@ -401,6 +433,7 @@ export class SupportService {
       waveform: m.waveform,
       forwardedFromName: m.forwardedFromName,
       forwardedFromUserId: m.forwardedFromUserId,
+      replyToId: m.replyToId,
       createdAt: m.createdAt,
     };
   }

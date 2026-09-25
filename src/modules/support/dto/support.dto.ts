@@ -78,6 +78,11 @@ export class SendSupportMessageDto {
   @MaxLength(SUPPORT_MAX_LENGTH)
   body?: string;
 
+  @ApiPropertyOptional({ description: 'A message in this thread to answer.' })
+  @IsOptional()
+  @IsUUID()
+  replyToId?: string;
+
   @ApiPropertyOptional({ type: SupportImageDto })
   @IsOptional()
   @ValidateNested()
@@ -111,6 +116,13 @@ export class SupportQueryDto {
   @IsInt()
   @Min(0)
   offset?: number;
+}
+
+export class PinSupportDto {
+  @ApiPropertyOptional({ description: 'Omit or send null to clear the pin.' })
+  @IsOptional()
+  @IsUUID()
+  messageId?: string | null;
 }
 
 export class SupportStatusDto {

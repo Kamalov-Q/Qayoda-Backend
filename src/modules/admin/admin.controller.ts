@@ -64,6 +64,16 @@ export class AdminController {
     return this.admin.findUsers(query);
   }
 
+  @ApiOperation({
+    summary: 'One user, with their record',
+    description:
+      'Profile, sign-in methods, listing counts and total views, reviews and comments written, and reports both against their listings and filed by them. Nothing private — no chat contents and no saved listings.',
+  })
+  @Get('users/:id')
+  user(@Param('id', ParseUUIDPipe) id: string) {
+    return this.admin.getUser(id);
+  }
+
   @ApiOperation({ summary: 'Listings, newest first' })
   @Get('listings')
   listings(@Query() query: AdminListingsQueryDto) {

@@ -53,3 +53,9 @@ BEGIN;
 ALTER TABLE support_messages
   ADD COLUMN IF NOT EXISTS forwarded_from_user_id uuid;
 COMMIT;
+
+-- Reply and pin inside a support thread, mirroring what a chat already has.
+BEGIN;
+ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS reply_to_id       uuid;
+ALTER TABLE support_threads  ADD COLUMN IF NOT EXISTS pinned_message_id uuid;
+COMMIT;
