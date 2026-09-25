@@ -38,6 +38,17 @@ export class SupportThread {
   @Column({ name: 'last_message_at', type: 'timestamptz', nullable: true })
   lastMessageAt: Date | null;
 
+  /**
+   * When each side last read the thread. The counters below answer "is there
+   * anything new"; these answer "has what I sent been seen", which is the
+   * question a tick mark on a message is actually about.
+   */
+  @Column({ name: 'user_read_at', type: 'timestamptz', nullable: true })
+  userReadAt: Date | null;
+
+  @Column({ name: 'admin_read_at', type: 'timestamptz', nullable: true })
+  adminReadAt: Date | null;
+
   /** Unread counts per side, so neither has to count rows to draw a badge. */
   @Column({ name: 'user_unread', type: 'int', default: 0 }) userUnread: number;
   @Column({ name: 'admin_unread', type: 'int', default: 0 })

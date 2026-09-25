@@ -69,10 +69,12 @@ export class SupportService {
   /** Write to support. Creates the thread on the first message. */
   async send(userId: string, dto: SendSupportMessageDto) {
     const body = dto.body?.trim() ?? '';
-    if (!body && !dto.image) {
+    // Any attachment counts as content: a voice note with no caption is a
+    // message, and refusing it would be refusing the commonest kind.
+    if (!body && !dto.image && !dto.mediaUrl) {
       throw new BadRequestException({
         code: 'MESSAGE_EMPTY',
-        message: 'Write something or attach a screenshot',
+        message: 'Write something or attach a file',
       });
     }
 
@@ -88,10 +90,7 @@ export class SupportService {
           threadId: thread.id,
           senderId: userId,
           fromAdmin: false,
-          type: dto.image ? 'IMAGE' : 'TEXT',
-          body,
-          imageUrl: dto.image?.url ?? null,
-          imageThumbUrl: dto.image?.thumbUrl ?? null,
+          ...this.attachmentOf(dto, body),
         }),
       );
 
@@ -159,7 +158,10 @@ export class SupportService {
 
   /** The user has read whatever support wrote. */
   async markRead(userId: string) {
-    await this.threads.update({ userId }, { userUnread: 0 });
+    await this.threads.update(
+      { userId },
+      { userUnread: 0, userReadAt: new Date() },
+    );
     return { success: true };
   }
 
@@ -228,10 +230,12 @@ export class SupportService {
     dto: SendSupportMessageDto,
   ) {
     const body = dto.body?.trim() ?? '';
-    if (!body && !dto.image) {
+    // Any attachment counts as content: a voice note with no caption is a
+    // message, and refusing it would be refusing the commonest kind.
+    if (!body && !dto.image && !dto.mediaUrl) {
       throw new BadRequestException({
         code: 'MESSAGE_EMPTY',
-        message: 'Write something or attach a screenshot',
+        message: 'Write something or attach a file',
       });
     }
 
@@ -244,10 +248,7 @@ export class SupportService {
           threadId,
           senderId: adminId,
           fromAdmin: true,
-          type: dto.image ? 'IMAGE' : 'TEXT',
-          body,
-          imageUrl: dto.image?.url ?? null,
-          imageThumbUrl: dto.image?.thumbUrl ?? null,
+          ...this.attachmentOf(dto, body),
         }),
       );
 
@@ -257,6 +258,7 @@ export class SupportService {
         // Answering clears the queue badge: the desk has dealt with it, and
         // a separate "mark read" click for every reply is a click for nothing.
         adminUnread: 0,
+        adminReadAt: saved.createdAt,
       });
 
       return saved;
@@ -275,7 +277,10 @@ export class SupportService {
 
   /** Opening a thread in the dashboard is reading it. */
   async adminMarkRead(threadId: string) {
-    await this.threads.update(threadId, { adminUnread: 0 });
+    await this.threads.update(threadId, {
+      adminUnread: 0,
+      adminReadAt: new Date(),
+    });
     return { success: true };
   }
 
@@ -286,6 +291,35 @@ export class SupportService {
   }
 
   // ------------------------------------------------------------------ helpers
+
+  /**
+   * One message's content columns, from whichever shape the caller sent.
+   *
+   * `image` is the composer's own upload; `mediaUrl` is everything else,
+   * including anything forwarded in from a chat. Images keep their dedicated
+   * pair so the existing rendering does not have to learn a second way to
+   * find a photo.
+   */
+  private attachmentOf(dto: SendSupportMessageDto, body: string) {
+    const type = dto.type ?? (dto.image ? 'IMAGE' : 'TEXT');
+    const isImage = type === 'IMAGE';
+    const url = dto.image?.url ?? dto.mediaUrl ?? null;
+
+    return {
+      type,
+      body,
+      imageUrl: isImage ? url : null,
+      imageThumbUrl: isImage
+        ? (dto.image?.thumbUrl ?? dto.thumbUrl ?? url)
+        : null,
+      mediaUrl: isImage ? null : url,
+      fileName: dto.fileName ?? null,
+      fileSize: dto.fileSize != null ? String(dto.fileSize) : null,
+      mimeType: dto.mimeType ?? null,
+      durationSec: dto.durationSec ?? null,
+      waveform: dto.waveform ?? null,
+    };
+  }
 
   private async transcript(threadId: string) {
     const rows = await this.messages.find({
@@ -337,6 +371,10 @@ export class SupportService {
       userId: t.userId,
       status: t.status,
       lastMessageAt: t.lastMessageAt,
+      // A message is "read" when the other side's read stamp is later than
+      // it — one timestamp per side rather than a flag per message.
+      userReadAt: t.userReadAt,
+      adminReadAt: t.adminReadAt,
       userUnread: t.userUnread,
       adminUnread: t.adminUnread,
       createdAt: t.createdAt,

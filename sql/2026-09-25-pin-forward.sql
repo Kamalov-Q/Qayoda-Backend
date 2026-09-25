@@ -40,3 +40,10 @@ ALTER TABLE support_messages
   ADD COLUMN IF NOT EXISTS forwarded_from_name varchar(120);
 
 COMMIT;
+
+-- Read receipts on support threads: one stamp per side, rather than a flag on
+-- every message. A message is "read" when the other side's stamp is later.
+BEGIN;
+ALTER TABLE support_threads ADD COLUMN IF NOT EXISTS user_read_at  timestamptz;
+ALTER TABLE support_threads ADD COLUMN IF NOT EXISTS admin_read_at timestamptz;
+COMMIT;
