@@ -118,8 +118,12 @@ export class SupportController {
   @ApiOperation({ summary: "Mark support's answers as read" })
   @Post('read')
   @HttpCode(200)
-  read(@CurrentUser() user: AuthUser) {
-    return this.support.markRead(user.sub);
+  async read(@CurrentUser() user: AuthUser) {
+    const thread = await this.support.markRead(user.sub);
+    // Both rooms: the desk ticks its replies over to read, and the reader's
+    // own other devices drop the badge.
+    if (thread) this.gateway.emitThread(user.sub, thread);
+    return thread ?? { success: true };
   }
 }
 
@@ -216,7 +220,9 @@ export class AdminSupportController {
   @ApiOperation({ summary: 'Mark the thread as read by the desk' })
   @Post(':threadId/read')
   @HttpCode(200)
-  read(@Param('threadId', ParseUUIDPipe) threadId: string) {
-    return this.support.adminMarkRead(threadId);
+  async read(@Param('threadId', ParseUUIDPipe) threadId: string) {
+    const thread = await this.support.adminMarkRead(threadId);
+    if (thread) this.gateway.emitThread(thread.userId, thread);
+    return thread ?? { success: true };
   }
 }

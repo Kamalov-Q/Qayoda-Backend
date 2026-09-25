@@ -160,11 +160,14 @@ export class SupportService {
 
   /** The user has read whatever support wrote. */
   async markRead(userId: string) {
-    await this.threads.update(
-      { userId },
-      { userUnread: 0, userReadAt: new Date() },
-    );
-    return { success: true };
+    const now = new Date();
+    await this.threads.update({ userId }, { userUnread: 0, userReadAt: now });
+
+    // The thread comes back so the caller can tell the desk: a receipt that
+    // only lands in the database leaves the other side's ticks frozen until
+    // something else happens to refetch.
+    const thread = await this.threads.findOneBy({ userId });
+    return thread ? this.shapeThread(thread) : null;
   }
 
   /** For the tab badge — one number, no transcript. */
@@ -283,7 +286,9 @@ export class SupportService {
       adminUnread: 0,
       adminReadAt: new Date(),
     });
-    return { success: true };
+
+    const thread = await this.threads.findOneBy({ id: threadId });
+    return thread ? this.shapeThread(thread) : null;
   }
 
   /** The sidebar badge: how many threads are waiting on an answer. */
