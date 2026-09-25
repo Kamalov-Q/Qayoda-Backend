@@ -47,3 +47,9 @@ BEGIN;
 ALTER TABLE support_threads ADD COLUMN IF NOT EXISTS user_read_at  timestamptz;
 ALTER TABLE support_threads ADD COLUMN IF NOT EXISTS admin_read_at timestamptz;
 COMMIT;
+
+-- The forwarded author's id, so the attribution can open their profile.
+BEGIN;
+ALTER TABLE support_messages
+  ADD COLUMN IF NOT EXISTS forwarded_from_user_id uuid;
+COMMIT;

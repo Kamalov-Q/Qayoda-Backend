@@ -26,6 +26,7 @@ export interface ForwardPayload {
   durationSec: number | null;
   waveform: number[] | null;
   forwardedFromName: string | null;
+  forwardedFromUserId: string | null;
 }
 
 export interface Person {
@@ -141,6 +142,7 @@ export class SupportService {
           durationSec: source.durationSec ?? null,
           waveform: source.waveform ?? null,
           forwardedFromName: source.forwardedFromName ?? null,
+          forwardedFromUserId: source.forwardedFromUserId ?? null,
         }),
       );
 
@@ -398,6 +400,7 @@ export class SupportService {
       durationSec: m.durationSec,
       waveform: m.waveform,
       forwardedFromName: m.forwardedFromName,
+      forwardedFromUserId: m.forwardedFromUserId,
       createdAt: m.createdAt,
     };
   }

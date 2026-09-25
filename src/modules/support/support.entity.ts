@@ -126,5 +126,9 @@ export class SupportMessage {
   })
   forwardedFromName: string | null;
 
+  /** Kept alongside the name so the attribution can open their profile. */
+  @Column({ name: 'forwarded_from_user_id', type: 'uuid', nullable: true })
+  forwardedFromUserId: string | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' }) createdAt: Date;
 }

@@ -93,6 +93,7 @@ export class SupportController {
       durationSec: source.message.durationSec,
       waveform: source.message.waveform,
       forwardedFromName: source.authorName,
+      forwardedFromUserId: source.authorId,
     });
 
     this.gateway.emitMessage(user.sub, message);
