@@ -391,15 +391,50 @@ export class SupportService {
     const rows = await this.messages.find({
       where: { threadId: In(threadIds) },
       order: { createdAt: 'DESC' },
-      select: { threadId: true, body: true, imageUrl: true, createdAt: true },
+      select: {
+        threadId: true,
+        type: true,
+        body: true,
+        imageUrl: true,
+        fileName: true,
+        createdAt: true,
+      },
     });
 
     const byThread = new Map<string, string>();
     for (const row of rows) {
       if (byThread.has(row.threadId)) continue;
-      byThread.set(row.threadId, row.body || (row.imageUrl ? '📷' : ''));
+      byThread.set(row.threadId, this.previewOf(row));
     }
     return byThread;
+  }
+
+  /**
+   * One line describing a message, for the queue.
+   *
+   * An attachment with no caption used to come back as an empty string, so
+   * the queue showed "—" — which reads as "nothing was said" for a thread
+   * whose last word was a voice note. The caption wins when there is one,
+   * because that is what the person actually wrote.
+   */
+  private previewOf(m: Pick<SupportMessage, 'type' | 'body' | 'imageUrl' | 'fileName'>) {
+    if (m.body) return m.body;
+
+    switch (m.type) {
+      case 'IMAGE':
+        return '📷 Rasm';
+      case 'VOICE':
+        return '🎤 Ovozli xabar';
+      case 'VIDEO':
+      case 'VIDEO_NOTE':
+        return '🎬 Video';
+      case 'FILE':
+        return `📎 ${m.fileName ?? 'Fayl'}`;
+      default:
+        // A TEXT row with no body should not exist; an empty line is a
+        // truer answer than inventing a description for it.
+        return m.imageUrl ? '📷 Rasm' : '';
+    }
   }
 
   private async people(ids: string[]) {
