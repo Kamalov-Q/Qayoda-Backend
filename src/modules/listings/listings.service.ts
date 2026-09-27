@@ -84,6 +84,8 @@ export class ListingsService {
             ? stripHtml(dto.descriptionHtml)
             : null,
           rooms: dto.rooms ?? null,
+          sellerType: dto.sellerType ?? null,
+          buildingType: dto.buildingType ?? null,
           // Whatever the owner sent wins, in both modes. POLYGON: the app
           // pre-fills it from the boundary and the owner may correct it
           // (a drawn outline is an estimate — walls, shared land); when it

@@ -15,6 +15,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { BuildingType, SellerType } from '../enums/seller-type.enum';
 import { OfferPurpose } from '../enums/offer-purpose.enum';
 import { Type } from 'class-transformer';
 import { CATEGORY_SLUG } from '../../categories/categories.constants';
@@ -92,6 +93,24 @@ export class CreateListingDto {
   @IsInt()
   @Min(0)
   rooms?: number;
+
+  @ApiPropertyOptional({
+    enum: SellerType,
+    description:
+      'Who is behind the advert: the owner, or an agent acting for them.',
+  })
+  @IsOptional()
+  @IsEnum(SellerType)
+  sellerType?: SellerType;
+
+  @ApiPropertyOptional({
+    enum: BuildingType,
+    description:
+      'New build or resale. Meaningless for land, so it is optional and left null there.',
+  })
+  @IsOptional()
+  @IsEnum(BuildingType)
+  buildingType?: BuildingType;
 
   @ApiPropertyOptional({
     type: 'integer',

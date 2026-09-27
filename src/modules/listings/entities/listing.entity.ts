@@ -9,6 +9,7 @@ import {
   Index,
 } from 'typeorm';
 import { ListingStatus } from '../enums/listing-status.enum';
+import { BuildingType, SellerType } from '../enums/seller-type.enum';
 import { ListingImage } from './listing-image.entity';
 import { ListingOffer } from './listing-offer.entity';
 import type { GeoJsonPoint, GeoJsonPolygon } from '../types/geojson.type';
@@ -51,6 +52,30 @@ export class Listing {
   @Column({ type: 'int', nullable: true }) floor: number | null;
   @Column({ name: 'total_floors', type: 'int', nullable: true }) totalFloors:
     number | null;
+  /**
+   * Whether the advert comes from the owner or an agent. Nullable because
+   * every listing posted before this existed has no answer, and guessing one
+   * would put a claim in the seller's mouth.
+   */
+  @Index()
+  @Column({
+    name: 'seller_type',
+    type: 'enum',
+    enum: SellerType,
+    nullable: true,
+  })
+  sellerType: SellerType | null;
+
+  /** New build or resale. Null for land, and for older listings. */
+  @Index()
+  @Column({
+    name: 'building_type',
+    type: 'enum',
+    enum: BuildingType,
+    nullable: true,
+  })
+  buildingType: BuildingType | null;
+
   /** Auto-derived from the drawn boundary (reverse geocode) — not typed. */
   @Column({ type: 'text', nullable: true }) address: string | null;
 
