@@ -22,6 +22,10 @@ import { ListingsService } from '../modules/listings/listings.service';
 import { CategoriesService } from '../modules/categories/categories.service';
 import { CreateListingDto } from '../modules/listings/dto/create-listing.dto';
 import { OfferPurpose } from '../modules/listings/enums/offer-purpose.enum';
+import {
+  BuildingType,
+  SellerType,
+} from '../modules/listings/enums/seller-type.enum';
 
 /** A square boundary around a point, roughly `metres` across — what a drawn plot looks like. */
 function plot(lng: number, lat: number, metres: number): [number, number][][] {
@@ -54,9 +58,28 @@ const IMAGES = {
   office: ['photo-1497366216548-37526070297c', 'photo-1497366811353-6870744d04b2'],
   hotel: ['photo-1566073771259-6a8506099945', 'photo-1618773928121-c32242e63f39'],
   shop: ['photo-1441986300917-64674bd600d8', 'photo-1604719312566-8912e9227c6a'],
+  newbuild: [
+    'photo-1522708323590-d24dbb6b0267',
+    'photo-1600607687939-ce8a6c25118c',
+    'photo-1600566753086-00f18fb6b3ea',
+  ],
+  cosy: [
+    'photo-1522771739844-6a9f6d5f14af',
+    'photo-1524758631624-e2822e304c36',
+    'photo-1586023492125-27b2c045efd7',
+  ],
 };
 
 /** Real districts and streets; coordinates are the actual neighbourhoods. */
+/**
+ * Descriptions written the way sellers really write them: pasted out of a
+ * Telegram channel, emoji and all, repeating facts that are also structured
+ * fields. That repetition is the point — the app shows the text verbatim, and
+ * a seed of tidy one-liners hides how the screen looks with real content.
+ *
+ * `<br>` matters: htmlToText turns it into a newline, which is what keeps the
+ * pasted layout intact on the detail page.
+ */
 const LISTINGS: (Omit<CreateListingDto, 'images'> & { images: string[] })[] = [
   {
     category: 'APARTMENT',
@@ -208,6 +231,145 @@ const LISTINGS: (Omit<CreateListingDto, 'images'> & { images: string[] })[] = [
     point: [69.2529, 41.2896],
     offers: [{ purpose: OfferPurpose.SALE, price: 112000, currency: 'USD' }],
     images: IMAGES.flat,
+  },
+  // ─────────── written in the Telegram-advert style, with the new fields
+  {
+    category: 'APARTMENT',
+    sellerType: SellerType.REALTOR,
+    buildingType: BuildingType.NEW,
+    title: '🏠 SHOSHILINCH! 2 xonali kvartira, Yangihayot',
+    descriptionHtml:
+      '<p>🏠 SHOSHILINCH SOTILADI — YANGI BINODA KVARTIRA!<br><br>' +
+      "Yangihayot tumani, Kamol Construction turar-joy majmuasida, 56,9 m².<br><br>" +
+      "✨ To'liq yevroremont — kirib yashash mumkin! Qo'shimcha ta'mir talab qilinmaydi.<br><br>" +
+      '📍 12 qavatli binoning 9-qavati<br>' +
+      '🛗 2 ta lift<br>' +
+      "👶 Bolalar maydonchasi<br>" +
+      '🚗 Avtoturargoh<br>' +
+      '📄 Kadastr tayyor!<br>' +
+      "⚡ Rasmiylashtirish 1 kunda!<br><br>" +
+      '💰 Sotib olish variantlari:<br>' +
+      "• bo'lib-bo'lib to'lash;<br>" +
+      '• ipoteka;<br>' +
+      "• naqd yoki pul o'tkazma.<br><br>" +
+      "🔥 SHOSHILINCH SOTUV! Tayyor kvartirani qo'ldan boy bermang.<br><br>" +
+      "📞 Savollar va ko'rish uchun qo'ng'iroq qiling.</p>",
+    rooms: 2,
+    floor: 9,
+    totalFloors: 12,
+    areaM2: 56.9,
+    address: "Toshkent, Yangihayot tumani, Yangihayot ko'chasi 12",
+    properties: ['REPAIRED', 'ELEVATOR', 'PARKING', 'SECURITY', 'BALCONY'],
+    contactPhone: '+998901234511',
+    point: [69.1930, 41.2050],
+    offers: [{ purpose: OfferPurpose.SALE, price: 55000, currency: 'USD' }],
+    images: IMAGES.newbuild,
+  },
+  {
+    category: 'APARTMENT',
+    sellerType: SellerType.OWNER,
+    buildingType: BuildingType.SECONDARY,
+    title: '☀️ Yakkasaroy, 3 xonali, egasidan',
+    descriptionHtml:
+      '<p>☀️ YAKKASAROY TUMANI — EGASIDAN SOTILADI (vositachilarsiz)<br><br>' +
+      "Oybek metrosiga piyoda 6 daqiqa. 4 qavatli g'ishtli binoning 2-qavati, 78 m².<br><br>" +
+      "🔨 O'rtacha ta'mir — yashash uchun tayyor, xohlasangiz o'zingizga moslab yangilaysiz.<br><br>" +
+      '📍 Uyning yonida: 50-maktab, poliklinika, Oloy bozori<br>' +
+      "🌳 Hovli katta, daraxtzor, mashinaga joy bor<br>" +
+      "❄️ 2 ta konditsioner qoladi<br>" +
+      '🧾 Hujjatlar toza, bitta egasi<br><br>' +
+      "💬 Narx bo'yicha kelishamiz. Faqat jiddiy xaridorlar.<br>" +
+      '📞 Istalgan vaqtda qo\'ng\'iroq qiling.</p>',
+    rooms: 3,
+    floor: 2,
+    totalFloors: 4,
+    areaM2: 78,
+    address: "Toshkent, Yakkasaroy tumani, Shota Rustaveli ko'chasi 41",
+    properties: ['AC', 'BALCONY', 'PARKING', 'GARDEN'],
+    contactPhone: '+998901234512',
+    point: [69.2529, 41.2836],
+    offers: [{ purpose: OfferPurpose.SALE, price: 92000, currency: 'USD' }],
+    images: IMAGES.cosy,
+  },
+  {
+    category: 'HOUSE',
+    sellerType: SellerType.OWNER,
+    title: '🏡 Qibray, 8 sotix hovli, bog\'i bilan',
+    descriptionHtml:
+      '<p>🏡 QIBRAY TUMANIDA HOVLI UY SOTILADI<br><br>' +
+      "8 sotix yer, uy maydoni 180 m². Toshkentdan 20 daqiqa.<br><br>" +
+      '🌳 Bog\'ida olma, o\'rik, uzum<br>' +
+      '💧 Suv, gaz, svet — barchasi ulangan<br>' +
+      '🚗 2 ta mashinaga garaj<br>' +
+      '🏊 Kichik basseyn<br>' +
+      '🔥 Qishki isitish tizimi ishlaydi<br>' +
+      '📄 Hujjatlar tayyor, kadastr bor<br><br>' +
+      "🌻 Tinch ko'cha, qo'shnilar yaxshi. Oila uchun ideal joy.<br><br>" +
+      "📞 Ko'rish uchun oldindan qo'ng'iroq qiling.</p>",
+    rooms: 5,
+    areaM2: 180,
+    address: "Toshkent viloyati, Qibray tumani, Salar ko'chasi 27",
+    properties: ['GARDEN', 'GARAGE', 'POOL', 'HEATING', 'PARKING'],
+    contactPhone: '+998901234513',
+    point: [69.4050, 41.3720],
+    offers: [{ purpose: OfferPurpose.SALE, price: 1650000000, currency: 'UZS' }],
+    images: IMAGES.house,
+  },
+  {
+    category: 'APARTMENT',
+    sellerType: SellerType.REALTOR,
+    buildingType: BuildingType.NEW,
+    title: '🔑 Mirobod, 1 xonali, oylik ijara',
+    descriptionHtml:
+      '<p>🔑 IJARAGA BERILADI — MIROBOD, YANGI BINO<br><br>' +
+      "1 xonali kvartira, 42 m², 5-qavat. Toshkent shahar markaziga yaqin.<br><br>" +
+      '🛋 Mebel va texnika to\'liq<br>' +
+      '📶 Wi-Fi ulangan<br>' +
+      '❄️ Konditsioner<br>' +
+      '🛗 Lift, 24/7 qorovul<br>' +
+      '🚗 Yopiq avtoturargoh<br><br>' +
+      "💵 Oyiga 4 500 000 so'm. Kommunal alohida.<br>" +
+      "📅 Kamida 6 oyga. Depozit — 1 oylik.<br><br>" +
+      "👨‍👩‍👧 Oilaga yoki ishlaydigan yoshlarga beriladi.<br>" +
+      '📞 Batafsil ma\'lumot uchun yozing.</p>',
+    rooms: 1,
+    floor: 5,
+    totalFloors: 10,
+    areaM2: 42,
+    address: "Toshkent, Mirobod tumani, Nukus ko'chasi 8",
+    properties: ['FURNISHED', 'AC', 'INTERNET', 'ELEVATOR', 'SECURITY', 'PARKING'],
+    contactPhone: '+998901234514',
+    point: [69.2870, 41.2900],
+    offers: [{ purpose: OfferPurpose.RENT_MONTHLY, price: 4500000, currency: 'UZS' }],
+    images: IMAGES.flat,
+  },
+  {
+    category: 'APARTMENT',
+    sellerType: SellerType.OWNER,
+    buildingType: BuildingType.SECONDARY,
+    title: '🌆 Сергели, 2-комнатная, срочно',
+    descriptionHtml:
+      '<p>🌆 СРОЧНО ПРОДАЁТСЯ 2-КОМНАТНАЯ КВАРТИРА<br><br>' +
+      'Сергелийский район, 4-квартал. 54 м², 3 этаж из 5.<br><br>' +
+      '🔨 Косметический ремонт, всё в рабочем состоянии<br>' +
+      '🪟 Пластиковые окна<br>' +
+      '🚪 Железная дверь<br>' +
+      '🌡 Центральное отопление<br>' +
+      '🏫 Рядом школа №234 и детский сад<br>' +
+      '🚌 Остановка в 2 минутах<br><br>' +
+      '📄 Документы в порядке, один собственник.<br>' +
+      '💬 Торг уместен при осмотре.<br><br>' +
+      '📞 Звоните в любое время.</p>',
+    rooms: 2,
+    floor: 3,
+    totalFloors: 5,
+    areaM2: 54,
+    address: "Toshkent, Sergeli tumani, 4-kvartal, Yangi Sergeli ko'chasi 15",
+    properties: ['HEATING', 'BALCONY'],
+    contactPhone: '+998901234515',
+    point: [69.2200, 41.2200],
+    offers: [{ purpose: OfferPurpose.SALE, price: 46000, currency: 'USD' }],
+    images: IMAGES.cosy,
   },
 ];
 
