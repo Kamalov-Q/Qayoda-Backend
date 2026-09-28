@@ -12,6 +12,7 @@ import { Message } from '../chat/entities/message.entity';
 import { Listing } from '../listings/entities/listing.entity';
 import { User } from '../users/entities/user.entity';
 import { ChatReport } from './chat-report.entity';
+import { RatingService } from '../rating/rating.service';
 import {
   AdminReportsQueryDto,
   AdminReportStatusDto,
@@ -32,6 +33,7 @@ export class ChatReportsService {
     @InjectRepository(Message) private readonly messages: Repository<Message>,
     @InjectRepository(Listing) private readonly listings: Repository<Listing>,
     @InjectRepository(User) private readonly users: Repository<User>,
+    private readonly rating: RatingService,
   ) {}
 
   /** Reporting is for the two people in the chat — nobody else can see it. */
@@ -173,7 +175,33 @@ export class ChatReportsService {
     const report = await this.reports.findOneBy({ id });
     if (!report) throw new NotFoundException({ code: 'REPORT_NOT_FOUND' });
     await this.reports.update(id, { status: dto.status });
+
+    // Upheld, this counts against whoever was reported — on every listing
+    // they have. Someone abusive in messages is a risk to deal with whichever
+    // advert you found them through.
+    const accused = await this.accusedIn(report.conversationId, report.reporterId);
+    if (accused) await this.rating.recomputeOwner(accused);
+
     return { ...report, status: dto.status };
+  }
+
+  /**
+   * Who a chat report is about. The row names a conversation and its author,
+   * so the accused is simply the participant who did not file it.
+   */
+  private async accusedIn(
+    conversationId: string,
+    reporterId: string,
+  ): Promise<string | null> {
+    const conversation = await this.conversations.findOne({
+      where: { id: conversationId },
+      select: { id: true, hostId: true, guestId: true },
+    });
+    if (!conversation) return null;
+
+    return conversation.hostId === reporterId
+      ? conversation.guestId
+      : conversation.hostId;
   }
 
   openCount() {

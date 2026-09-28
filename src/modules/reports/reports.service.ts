@@ -15,6 +15,7 @@ import {
   AdminReportStatusDto,
   CreateReportDto,
 } from './dto/report.dto';
+import { RatingService } from '../rating/rating.service';
 
 const DEFAULT_LIMIT = 20;
 
@@ -25,6 +26,7 @@ export class ReportsService {
     private readonly reports: Repository<ListingReport>,
     @InjectRepository(Listing) private readonly listings: Repository<Listing>,
     @InjectRepository(User) private readonly users: Repository<User>,
+    private readonly rating: RatingService,
   ) {}
 
   async create(listingId: string, reporterId: string, dto: CreateReportDto) {
@@ -88,50 +90,56 @@ export class ReportsService {
 
     const listingIds = [...new Set(rows.map((r) => r.listingId))];
     const reporterIds = [...new Set(rows.map((r) => r.reporterId))];
+    // Typed empties rather than a bare `[]`: the union of `Listing[] | never[]`
+    // collapses the Maps below to `Map<any, any>`, and every lookup on them
+    // stops being checked at all.
     const [listings, reporters] = await Promise.all([
       listingIds.length
         ? this.listings.find({
             where: { id: In(listingIds) },
             select: { id: true, title: true, status: true, address: true },
           })
-        : [],
+        : Promise.resolve<Listing[]>([]),
       reporterIds.length
         ? this.users.find({
             where: { id: In(reporterIds) },
             select: { id: true, name: true, surname: true, phoneNumber: true },
           })
-        : [],
+        : Promise.resolve<User[]>([]),
     ]);
     const listingById = new Map(listings.map((l) => [l.id, l] as const));
     const reporterById = new Map(reporters.map((u) => [u.id, u] as const));
 
     return {
       total,
-      items: rows.map((r) => ({
-        id: r.id,
-        reason: r.reason,
-        comment: r.comment,
-        status: r.status,
-        createdAt: r.createdAt,
-        listing: listingById.get(r.listingId)
-          ? {
-              id: r.listingId,
-              title: listingById.get(r.listingId)!.title,
-              status: listingById.get(r.listingId)!.status,
-              address: listingById.get(r.listingId)!.address,
-            }
-          : // The listing may have been hard-deleted since; the report keeps
-            // its id so the row still tells a story.
-            { id: r.listingId, title: null, status: null, address: null },
-        reporter: reporterById.get(r.reporterId)
-          ? {
-              id: r.reporterId,
-              name: reporterById.get(r.reporterId)!.name,
-              surname: reporterById.get(r.reporterId)!.surname,
-              phoneNumber: reporterById.get(r.reporterId)!.phoneNumber,
-            }
-          : null,
-      })),
+      items: rows.map((r) => {
+        const listing = listingById.get(r.listingId);
+        const reporter = reporterById.get(r.reporterId);
+
+        return {
+          id: r.id,
+          reason: r.reason,
+          comment: r.comment,
+          status: r.status,
+          createdAt: r.createdAt,
+          // The listing may have been hard-deleted since; the report keeps its
+          // id either way, so the row still tells a story.
+          listing: {
+            id: r.listingId,
+            title: listing?.title ?? null,
+            status: listing?.status ?? null,
+            address: listing?.address ?? null,
+          },
+          reporter: reporter
+            ? {
+                id: reporter.id,
+                name: reporter.name,
+                surname: reporter.surname,
+                phoneNumber: reporter.phoneNumber,
+              }
+            : null,
+        };
+      }),
     };
   }
 
@@ -139,6 +147,16 @@ export class ReportsService {
     const report = await this.reports.findOneBy({ id });
     if (!report) throw new NotFoundException({ code: 'REPORT_NOT_FOUND' });
     await this.reports.update(id, { status: dto.status });
+
+    // Upholding a report — or taking one back — is the moment it starts or
+    // stops counting against the rating. The seller's whole shelf is
+    // recomputed, not just this advert: their record follows them across it.
+    const listing = await this.listings.findOne({
+      where: { id: report.listingId },
+      select: { id: true, ownerId: true },
+    });
+    if (listing) await this.rating.recomputeOwner(listing.ownerId);
+
     return { ...report, status: dto.status };
   }
 

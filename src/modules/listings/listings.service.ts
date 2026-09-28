@@ -3,11 +3,15 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ListingRepository } from './repositories/listing.repository';
+import {
+  ListingRepository,
+  type OwnerListingSort,
+} from './repositories/listing.repository';
 import { ListingsGeoService } from './listings-geo.service';
 import { OutBoxService } from 'src/shared/events/outbox.service';
 import { DataSource } from 'typeorm';
 import { CreateListingDto } from './dto/create-listing.dto';
+import { ListListingsDto } from './dto/list-listings.dto';
 import { Listing } from './entities/listing.entity';
 import { ListingOffer } from './entities/listing-offer.entity';
 import { ListingStatus } from './enums/listing-status.enum';
@@ -21,6 +25,15 @@ import { CategoriesService } from '../categories/categories.service';
 import { AmenitiesService } from '../amenities/amenities.service';
 import { RatesService } from 'src/shared/rates/rates.service';
 import { TtlCache } from 'src/shared/cache/ttl-cache';
+
+/** The profile screen's narrowing of one seller's listings. */
+export interface OwnerListingsQuery {
+  purpose?: string;
+  category?: string;
+  sort?: OwnerListingSort;
+  limit?: number;
+  offset?: number;
+}
 
 @Injectable()
 export class ListingsService {
@@ -215,19 +228,22 @@ export class ListingsService {
     );
   }
 
-  findFeed(dto: import('./dto/list-listings.dto').ListListingsDto) {
+  findFeed(dto: ListListingsDto) {
     return this.cache.wrap(`feed:${JSON.stringify(dto)}`, 15_000, () =>
       this.uncachedFeed(dto),
     );
   }
 
-  private uncachedFeed(dto: import('./dto/list-listings.dto').ListListingsDto) {
+  private uncachedFeed(dto: ListListingsDto) {
     return this.listings.findFeed({
       purpose: dto.purpose,
       category: dto.category,
       priceMin: dto.priceMin,
       priceMax: dto.priceMax,
       search: dto.q?.trim() || undefined,
+      centerLng: dto.centerLng,
+      centerLat: dto.centerLat,
+      radiusM: dto.radiusM,
       sort: dto.sort ?? 'newest',
       limit: Math.min(dto.limit ?? 20, 50),
       offset: dto.offset ?? 0,
@@ -253,16 +269,25 @@ export class ListingsService {
   }
 
   /** One page of a user's live listings; 50 per page is the ceiling. */
-  findPublicByOwner(ownerId: string, limit?: number, offset?: number) {
-    return this.listings.findPublicByOwner(
-      ownerId,
-      limit ? Math.min(limit, 50) : undefined,
-      offset,
-    );
+  findPublicByOwner(ownerId: string, q: OwnerListingsQuery = {}) {
+    return this.listings.findPublicByOwner(ownerId, {
+      ...q,
+      limit: Math.min(q.limit ?? 20, 50),
+    });
   }
 
   countPublicByOwner(ownerId: string) {
     return this.listings.countPublicByOwner(ownerId);
+  }
+
+  /** What a profile's filter sheet is built from — see the repository. */
+  facetsByOwner(ownerId: string) {
+    return this.listings.facetsByOwner(ownerId);
+  }
+
+  /** The numbers across the top of a profile. */
+  statsByOwner(ownerId: string) {
+    return this.listings.statsByOwner(ownerId);
   }
 
   // ---- Saved listings ------------------------------------------------------

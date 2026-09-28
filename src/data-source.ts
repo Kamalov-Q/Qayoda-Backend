@@ -25,6 +25,11 @@ export default new DataSource({
   url,
   ssl: isLocalHost ? false : { rejectUnauthorized: true },
   // Compiled or not, whichever the caller is running.
+  //
+  // BOTH globs load, and a stale `dist` wins where the two disagree — an
+  // entity edited but not rebuilt makes `schema:sql` report drift that does
+  // not exist (and miss drift that does). Run `npm run build` before trusting
+  // its output, or delete `dist`.
   entities: ['src/**/*.entity.ts', 'dist/**/*.entity.js'],
   synchronize: false,
   logging: false,

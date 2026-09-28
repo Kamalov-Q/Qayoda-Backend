@@ -7,6 +7,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
   Matches,
@@ -72,4 +73,41 @@ export class ListListingsDto {
   @IsInt()
   @Min(0)
   offset?: number;
+
+  @ApiPropertyOptional({
+    example: 69.24,
+    description:
+      'Centre of a radius filter, with `centerLat` and `radiusM`. All three ' +
+      'are needed; any one alone is ignored.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  centerLng?: number;
+
+  @ApiPropertyOptional({ example: 41.31 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  centerLat?: number;
+
+  @ApiPropertyOptional({
+    example: 1500,
+    minimum: 100,
+    maximum: 100000,
+    description:
+      'Radius in metres. Measured from the centroid, so a plot is in or out ' +
+      'by its middle rather than by whichever corner is nearest.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(100)
+  @Max(100_000)
+  radiusM?: number;
+
 }

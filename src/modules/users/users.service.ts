@@ -1,8 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { BlocksService } from '../blocks/blocks.service';
+import { RatingService } from '../rating/rating.service';
 import { OutBoxService } from 'src/shared/events/outbox.service';
 import { ListingsFacade } from '../listings/listings.facade';
+import type { OwnerListingsQuery } from '../listings/listings.service';
 import { User } from './entities/user.entity';
 import { UserRepository } from './repositories/user.repository';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -24,6 +26,7 @@ export class UsersService {
     private readonly outbox: OutBoxService,
     private readonly dataSource: DataSource,
     private readonly blocks: BlocksService,
+    private readonly rating: RatingService,
   ) {}
 
   // ------------------------------------------------------------- own profile
@@ -154,21 +157,35 @@ export class UsersService {
     // The card 404s on an unknown id, so the listings queries are only ever
     // used for a user that exists — but all are in flight before that is
     // known, which costs nothing on the miss and saves round trips on the hit.
-    const [user, listings, listingCount] = await Promise.all([
+    const [user, page, counts, rating, facets] = await Promise.all([
       this.getUserCard(userId),
-      this.listings.findPublicByOwner(userId, UsersService.PROFILE_PAGE),
-      this.listings.countPublicByOwner(userId),
+      this.listings.findPublicByOwner(userId, {
+        limit: UsersService.PROFILE_PAGE,
+      }),
+      this.listings.statsByOwner(userId),
+      // Their own stars, over every review anyone left them and every report
+      // upheld against them — not an average of their listings' averages,
+      // which nine empty listings would dilute.
+      this.rating.ownerRating(userId),
+      this.listings.facetsByOwner(userId),
     ]);
 
-    // `listings` is the first page only; `listingCount` is the real total, so
-    // the screen can say "12 e'lon" while holding 20 of them, and fetch the
-    // rest through GET /users/:id/listings as the reader scrolls.
-    return { ...user, listings, listingCount };
+    // `listings` is the first UNFILTERED page; `listingCount` is the real
+    // total, so the screen can say "12 e'lon" while holding 20 of them and
+    // fetch the rest through GET /users/:id/listings as the reader scrolls.
+    // `facets` is what its filter sheet offers, `stats` the row above it.
+    return {
+      ...user,
+      listings: page.items,
+      listingCount: page.total,
+      stats: { ...counts, ...rating },
+      facets,
+    };
   }
 
-  /** A page of someone's live listings, for scrolling past the first. */
-  findListingsByOwner(userId: string, limit?: number, offset?: number) {
-    return this.listings.findPublicByOwner(userId, limit, offset);
+  /** A page of someone's live listings — the profile's filters applied. */
+  findListingsByOwner(userId: string, q: OwnerListingsQuery) {
+    return this.listings.findPublicByOwner(userId, q);
   }
 
   async getPublicProfiles(userIds: string[]): Promise<PublicProfileResponse[]> {

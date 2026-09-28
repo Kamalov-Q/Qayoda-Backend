@@ -61,7 +61,7 @@ export class UsersController {
   @ApiOperation({
     summary: "One page of a user's listings",
     description:
-      'The profile card above carries the first 20 and the real total; this serves the rest as the reader scrolls. Live listings only, newest first.',
+      'The profile card above carries the first unfiltered page; this serves the rest as the reader scrolls, and everything once they filter. Live listings only. Returns `{ total, items }` — the total is for the filter in force, so the screen can say how many the reader is actually looking at.',
   })
   @ApiParam({ name: 'id', type: String, format: 'uuid', description: 'User id.' })
   @Get(':id/listings')
@@ -69,6 +69,6 @@ export class UsersController {
     @Param('id', ParseUUIDPipe) id: string,
     @Query() query: OwnerListingsQueryDto,
   ) {
-    return this.users.findListingsByOwner(id, query.limit, query.offset);
+    return this.users.findListingsByOwner(id, query);
   }
 }

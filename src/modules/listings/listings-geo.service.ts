@@ -83,6 +83,9 @@ export class ListingsGeoService {
       params.push(toLikePattern(q.address));
       addressFilter = `AND l.address ILIKE $${++i}`;
     }
+    // Appends its own three parameters, so it must come after every other
+    // `++i` above — the placeholders are positional.
+    const radiusFilter = this.radiusFilter(q, params, 'l.centroid');
 
     return this.dataSource.query<ViewportPolygonFeature[]>(
       `
@@ -101,7 +104,7 @@ export class ListingsGeoService {
   WHERE l.status = 'ACTIVE'
     AND l.centroid IS NOT NULL
     AND ST_Intersects(COALESCE(l.geom, l.centroid), ST_MakeEnvelope($2, $3, $4, $5, 4326))
-    ${categoryFilter} ${priceMinFilter} ${priceMaxFilter} ${addressFilter}
+    ${categoryFilter} ${priceMinFilter} ${priceMaxFilter} ${addressFilter} ${radiusFilter}
   ORDER BY l.published_at DESC NULLS LAST
   -- 200, not 500: every feature becomes a live view on the client map, and
   -- Expo Go gets jetsammed long before 500 custom markers render.
@@ -109,6 +112,30 @@ export class ListingsGeoService {
   `,
       params,
     );
+  }
+
+
+  /**
+   * `ST_DWithin` against the centroid, when all three radius parameters are
+   * present.
+   *
+   * Centroid rather than the drawn boundary: a plot is in or out by its
+   * middle, which is the answer a person expects from "within 1.5 km" — an
+   * edge-based test would pull in a farm whose far corner happens to reach.
+   *
+   * Geography, not geometry: metres are metres at any latitude, and the
+   * index on the column is a geography index already.
+   */
+  private radiusFilter(
+    q: { centerLng?: number; centerLat?: number; radiusM?: number },
+    params: unknown[],
+    column: string,
+  ): string {
+    if (q.centerLng == null || q.centerLat == null || !q.radiusM) return '';
+
+    params.push(q.centerLng, q.centerLat, q.radiusM);
+    const n = params.length;
+    return ` AND ST_DWithin(${column}, ST_SetSRID(ST_MakePoint($${n - 2}, $${n - 1}), 4326)::geography, $${n})`;
   }
 
   private async getPoints(q: MapViewportQueryDto) {
@@ -136,6 +163,7 @@ export class ListingsGeoService {
       // address search — which is the right reading of "filter by address".
       addressFilter = `AND address ILIKE $${++i}`;
     }
+    const radiusFilter = this.radiusFilter(q, params, 'centroid');
 
     return this.dataSource.query<ViewportPointFeature[]>(
       `
@@ -147,7 +175,7 @@ export class ListingsGeoService {
       FROM listing_map_points
       WHERE purpose = $1
         AND ST_Intersects(centroid, ST_MakeEnvelope($2, $3, $4, $5, 4326))
-        ${categoryFilter} ${priceMinFilter} ${priceMaxFilter} ${addressFilter}
+        ${categoryFilter} ${priceMinFilter} ${priceMaxFilter} ${addressFilter} ${radiusFilter}
       -- Same memory math as the polygon branch.
       LIMIT 300
       `,

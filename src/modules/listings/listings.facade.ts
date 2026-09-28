@@ -1,6 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ListingRepository } from './repositories/listing.repository';
-import { ListingsService } from './listings.service';
+import {
+  ListingsService,
+  type OwnerListingsQuery,
+} from './listings.service';
+import { UpdateListingDto } from './dto/update-listing.dto';
 
 @Injectable()
 export class ListingsFacade {
@@ -25,12 +29,20 @@ export class ListingsFacade {
     };
   }
 
-  findPublicByOwner(ownerId: string, limit?: number, offset?: number) {
-    return this.listingsService.findPublicByOwner(ownerId, limit, offset);
+  findPublicByOwner(ownerId: string, q: OwnerListingsQuery = {}) {
+    return this.listingsService.findPublicByOwner(ownerId, q);
   }
 
   countPublicByOwner(ownerId: string) {
     return this.listingsService.countPublicByOwner(ownerId);
+  }
+
+  facetsByOwner(ownerId: string) {
+    return this.listingsService.facetsByOwner(ownerId);
+  }
+
+  statsByOwner(ownerId: string) {
+    return this.listingsService.statsByOwner(ownerId);
   }
 
   async getSummaries(listingIds: string[]) {
@@ -53,10 +65,7 @@ export class ListingsFacade {
     return this.listingsService.restore(await this.mustGet(listingId));
   }
 
-  async updateById(
-    listingId: string,
-    dto: import('./dto/update-listing.dto').UpdateListingDto,
-  ) {
+  async updateById(listingId: string, dto: UpdateListingDto) {
     return this.listingsService.update(await this.mustGet(listingId), dto);
   }
 

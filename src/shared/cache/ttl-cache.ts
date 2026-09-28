@@ -16,8 +16,10 @@ export class TtlCache {
     const value = await load();
     if (this.store.size >= this.max) {
       // Drop the oldest entry — plain FIFO beats bookkeeping at this size.
-      const first = this.store.keys().next().value;
-      if (first !== undefined) this.store.delete(first);
+      // Destructured rather than `keys().next().value`, which the iterator
+      // types widen to `any`.
+      const [oldest] = this.store.keys();
+      if (oldest !== undefined) this.store.delete(oldest);
     }
     this.store.set(key, { value, expiresAt: Date.now() + ttlMs });
     return value;

@@ -13,6 +13,8 @@ import {
   ReviewsQueryDto,
   UpsertReviewDto,
 } from './dto/review.dto';
+import { RatingService } from '../rating/rating.service';
+import { PRIOR } from '../rating/rating.constants';
 
 const DEFAULT_LIMIT = 20;
 
@@ -29,6 +31,7 @@ export class ReviewsService {
     private readonly reviews: Repository<ListingReview>,
     @InjectRepository(Listing) private readonly listings: Repository<Listing>,
     @InjectRepository(User) private readonly users: Repository<User>,
+    private readonly rating: RatingService,
   ) {}
 
   /**
@@ -225,13 +228,19 @@ export class ReviewsService {
 
   /** Average, count and the five-bucket histogram, in one pass. */
   private async summaryOf(listingId: string) {
-    const rows = await this.reviews
-      .createQueryBuilder('r')
-      .select('r.rating', 'rating')
-      .addSelect('COUNT(*)', 'count')
-      .where('r.listing_id = :listingId', { listingId })
-      .groupBy('r.rating')
-      .getRawMany<{ rating: number; count: string }>();
+    const [rows, listing] = await Promise.all([
+      this.reviews
+        .createQueryBuilder('r')
+        .select('r.rating', 'rating')
+        .addSelect('COUNT(*)', 'count')
+        .where('r.listing_id = :listingId', { listingId })
+        .groupBy('r.rating')
+        .getRawMany<{ rating: number; count: string }>(),
+      this.listings.findOne({
+        where: { id: listingId },
+        select: { id: true, ratingAvg: true },
+      }),
+    ]);
 
     const distribution = emptyDistribution();
     let count = 0;
@@ -247,27 +256,34 @@ export class ReviewsService {
 
     return {
       count,
-      // Null, not 0: "no reviews yet" and "rated zero stars" are different
-      // things, and only one of them is possible.
-      average: count ? Math.round((sum / count) * 10) / 10 : null,
+      /**
+       * The listing's rating — the same number its card shows, read from the
+       * row RatingService wrote rather than averaged again here. Two places
+       * computing "the rating" two ways is how a card and the page it opens
+       * end up disagreeing by a tenth.
+       *
+       * It will not match the bars below it, and should not: those are what
+       * people wrote, this is what the marketplace concluded, and the gap
+       * between them is the prior, the age of the reviews and any upheld
+       * report. `reviewAverage` is the plain mean, for anyone who wants it.
+       */
+      average: listing?.ratingAvg ?? PRIOR,
+      reviewAverage: count ? Math.round((sum / count) * 10) / 10 : null,
       distribution,
     };
   }
 
   /**
-   * Push the aggregate onto the listing row. Recomputed from the reviews
-   * rather than incremented: an edit changes the sum by an amount nobody
-   * tracked, and a recount of one listing's reviews is an index lookup.
+   * Push the aggregate onto the listing row.
+   *
+   * Not a plain AVG any more: reviews are one of three things that decide a
+   * listing's stars, and the arithmetic lives in RatingService so that a
+   * review, a listing report and a chat report all land in the same formula.
+   * Recomputed rather than incremented either way — an edited review changes
+   * the sum by an amount nobody tracked.
    */
-  private async recount(listingId: string) {
-    await this.listings.query(
-      `UPDATE listings l
-          SET rating_avg = s.avg, rating_count = s.cnt
-         FROM (SELECT AVG(rating) AS avg, COUNT(*) AS cnt
-                 FROM listing_reviews WHERE listing_id = $1) s
-        WHERE l.id = $1`,
-      [listingId],
-    );
+  private recount(listingId: string) {
+    return this.rating.recomputeListing(listingId);
   }
 
   private async mustExist(listingId: string) {

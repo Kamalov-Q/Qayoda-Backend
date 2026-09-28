@@ -127,19 +127,30 @@ export class Listing {
   centroid: GeoJsonPoint | null;
 
   /**
-   * Denormalized from `listing_reviews`, recomputed by ReviewsService after
-   * every write. They live here so that stars cost nothing to show: every
-   * feed, card, profile and saved-list query already selects this entity, and
-   * a LATERAL aggregate on each of them would be a join per card.
+   * The listing's stars, decided by RatingService and rewritten whenever a
+   * review lands or a moderator upholds a report. It lives here so that stars
+   * cost nothing to show: every feed, card, profile and saved-list query
+   * already selects this entity, and computing it per card would be a join
+   * per card.
+   *
+   * Never null, and five to begin with: a listing nobody has rated is not a
+   * bad listing. See RatingService for what moves it off five.
    *
    * `real`, not `numeric`: node-postgres hands float4 back as a JS number,
-   * while numeric arrives as a string (see `areaM2`). Averaging five integers
-   * does not need more precision than that.
+   * while numeric arrives as a string (see `areaM2`). One decimal place of a
+   * five-point scale does not need more precision than that.
    */
-  @Column({ name: 'rating_avg', type: 'real', nullable: true })
-  ratingAvg: number | null;
+  @Column({ name: 'rating_avg', type: 'real', default: 5 })
+  ratingAvg: number;
 
-  /** How many people rated it. 0 means "no reviews", never "rated zero". */
+  /**
+   * How many people REVIEWED it — the "(12)" beside the stars.
+   *
+   * Not how many votes went into `ratingAvg`: the prior and any upheld
+   * reports weigh on the score without being things anyone wrote. Counting
+   * them here would tell a reader that twelve people had spoken when four
+   * had.
+   */
   @Column({ name: 'rating_count', type: 'int', default: 0 })
   ratingCount: number;
 

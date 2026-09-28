@@ -3,6 +3,9 @@ import { In, DataSource, Repository } from 'typeorm';
 import { Listing } from '../entities/listing.entity';
 import { ListingStatus } from '../enums/listing-status.enum';
 
+/** How a profile's listings can be ordered. */
+export type OwnerListingSort = 'newest' | 'oldest' | 'priceAsc' | 'priceDesc';
+
 @Injectable()
 export class ListingRepository extends Repository<Listing> {
   constructor(private readonly dataSource: DataSource) {
@@ -35,6 +38,10 @@ export class ListingRepository extends Repository<Listing> {
     priceMin?: number;
     priceMax?: number;
     search?: string;
+    /** All three together, or none — a centre without a radius means nothing. */
+    centerLng?: number;
+    centerLat?: number;
+    radiusM?: number;
     sort: 'newest' | 'priceAsc' | 'priceDesc';
     limit: number;
     offset: number;
@@ -63,6 +70,19 @@ export class ListingRepository extends Repository<Listing> {
       qb.andWhere('(l.title ILIKE :search OR l.address ILIKE :search)', {
         search: `%${q.search.replace(/[\\%_]/g, '\\$&')}%`,
       });
+    }
+
+    // Same rule as the map: a listing is in or out by its centroid, so the
+    // circle drawn on the map and the list behind it agree.
+    if (q.centerLng != null && q.centerLat != null && q.radiusM) {
+      qb.andWhere(
+        `ST_DWithin(
+           l.centroid,
+           ST_SetSRID(ST_MakePoint(:centerLng, :centerLat), 4326)::geography,
+           :radiusM
+         )`,
+        { centerLng: q.centerLng, centerLat: q.centerLat, radiusM: q.radiusM },
+      );
     }
 
     if (q.sort === 'newest') {
@@ -131,23 +151,163 @@ export class ListingRepository extends Repository<Listing> {
     });
   }
 
-  /** Same as `findMine`, minus the drafts and archived rows only the owner may see. */
   /**
-   * One page of someone's live listings. Paged because this feeds a profile
-   * screen on a phone: an agency with 200 ads would otherwise ship all of
-   * them, with every offer and image row, in a single response.
+   * The cheapest live offer on a listing, in USD. Used to sort a profile by
+   * price: a listing can carry both a sale and a rent offer, and the one a
+   * reader means by "cheapest first" is the lowest of whichever are live.
    */
-  findPublicByOwner(ownerId: string, limit = 20, offset = 0) {
-    return this.find({
-      where: { ownerId, status: ListingStatus.ACTIVE },
+  private static readonly OWNER_PRICE = `(
+    SELECT MIN(o.price_usd) FROM listing_offers o
+     WHERE o.listing_id = l.id AND o.is_active = true
+  )`;
+
+  /**
+   * One page of someone's live listings, filtered and sorted the way their
+   * profile asks for. Paged because this feeds a profile screen on a phone:
+   * an agency with 200 ads would otherwise ship all of them, with every offer
+   * and image row, in a single response.
+   *
+   * Ids first, then a plain relation fetch — the same two-step `findSimilar`
+   * uses. A single joined query would make TypeORM wrap everything in its
+   * DISTINCT-ids subquery, which cannot order by an expression that subquery
+   * does not select.
+   */
+  async findPublicByOwner(
+    ownerId: string,
+    q: {
+      purpose?: string;
+      category?: string;
+      sort?: OwnerListingSort;
+      limit?: number;
+      offset?: number;
+    } = {},
+  ): Promise<{ items: Listing[]; total: number }> {
+    const limit = q.limit ?? 20;
+    const offset = q.offset ?? 0;
+
+    const base = this.createQueryBuilder('l')
+      .where('l.ownerId = :ownerId', { ownerId })
+      .andWhere('l.status = :status', { status: ListingStatus.ACTIVE });
+
+    // EXISTS rather than a join: a listing with both a sale and a rent offer
+    // must count once, and a join would duplicate its row into the page.
+    if (q.purpose) {
+      base.andWhere(
+        `EXISTS (SELECT 1 FROM listing_offers o
+                  WHERE o.listing_id = l.id AND o.is_active = true
+                    AND o.purpose = :purpose)`,
+        { purpose: q.purpose },
+      );
+    }
+    if (q.category) base.andWhere('l.category = :category', { category: q.category });
+
+    // The real total for THIS filter, so the profile can say how many the
+    // reader is looking at rather than how many the seller has in all.
+    const total = await base.getCount();
+    if (offset >= total) return { items: [], total };
+
+    const idsQb = base.clone().select('l.id', 'id');
+    switch (q.sort) {
+      case 'oldest':
+        idsQb.orderBy('l.createdAt', 'ASC');
+        break;
+      case 'priceAsc':
+      case 'priceDesc':
+        idsQb
+          .addSelect(ListingRepository.OWNER_PRICE, 'sort_price')
+          // A listing whose offers carry no USD price sorts last either way —
+          // it is not cheap, its price is unknown.
+          .orderBy('sort_price', q.sort === 'priceAsc' ? 'ASC' : 'DESC', 'NULLS LAST');
+        break;
+      default:
+        idsQb.orderBy('l.createdAt', 'DESC');
+    }
+
+    const rows = await idsQb
+      // `limit`/`offset`, not `take`/`skip`: this builder returns raw rows, so
+      // there is no entity hydration for take/skip to protect.
+      .limit(limit)
+      .offset(offset)
+      .getRawMany<{ id: string }>();
+
+    const ids = rows.map((r) => r.id);
+    if (!ids.length) return { items: [], total };
+
+    const items = await this.find({
+      where: { id: In(ids) },
       relations: { offers: true, images: true },
-      order: { createdAt: 'DESC' },
-      take: limit,
-      skip: offset,
     });
+    const byId = new Map(items.map((l) => [l.id, l]));
+
+    // `find` returns them in whatever order Postgres liked; the sort lives in
+    // the id query, so it is reapplied here.
+    return {
+      items: ids.map((id) => byId.get(id)).filter((l): l is Listing => !!l),
+      total,
+    };
   }
 
   countPublicByOwner(ownerId: string) {
     return this.countBy({ ownerId, status: ListingStatus.ACTIVE });
+  }
+
+  /**
+   * How many live listings the seller has per purpose and per category.
+   *
+   * What the profile's filter sheet is built from: an option with nothing
+   * behind it is not offered at all, and the ones that remain carry their
+   * count. Cheap — two grouped counts over one seller's rows.
+   */
+  async facetsByOwner(ownerId: string): Promise<{
+    purposes: Record<string, number>;
+    categories: Record<string, number>;
+  }> {
+    const [purposes, categories] = await Promise.all([
+      this.query<{ key: string; count: number }[]>(
+        `SELECT o.purpose AS key, COUNT(DISTINCT l.id)::int AS count
+           FROM listings l
+           JOIN listing_offers o
+             ON o.listing_id = l.id AND o.is_active = true
+          WHERE l.owner_id = $1 AND l.status = 'ACTIVE'
+          GROUP BY o.purpose`,
+        [ownerId],
+      ),
+      this.query<{ key: string; count: number }[]>(
+        `SELECT l.category AS key, COUNT(*)::int AS count
+           FROM listings l
+          WHERE l.owner_id = $1 AND l.status = 'ACTIVE'
+          GROUP BY l.category`,
+        [ownerId],
+      ),
+    ]);
+
+    const toMap = (rows: { key: string; count: number }[]) =>
+      Object.fromEntries(rows.map((r) => [r.key, r.count]));
+
+    return { purposes: toMap(purposes), categories: toMap(categories) };
+  }
+
+  /**
+   * The counts across the top of a profile. Views are already denormalised
+   * onto each listing, so this is one pass over the seller's own rows — no
+   * join, no per-listing round trip.
+   *
+   * The seller's RATING is not here: it is not an average of these rows (see
+   * RatingService.ownerRating), and computing a second version of it from
+   * `rating_avg` would be a number that disagrees with the profile.
+   */
+  async statsByOwner(ownerId: string): Promise<{
+    listings: number;
+    views: number;
+  }> {
+    const [row] = await this.query<{ listings: number; views: number }[]>(
+      `SELECT COUNT(*)::int                     AS listings,
+              COALESCE(SUM(view_count), 0)::int AS views
+         FROM listings
+        WHERE owner_id = $1 AND status = 'ACTIVE'`,
+      [ownerId],
+    );
+
+    return { listings: row?.listings ?? 0, views: row?.views ?? 0 };
   }
 }
