@@ -144,6 +144,15 @@ export class Listing {
   ratingCount: number;
 
   /**
+   * Top-level comments, denormalized from `listing_comments` the same way
+   * the rating and view count are. A comment icon on a card with no number
+   * beside it tells a reader nothing — and counting per card would be a
+   * query per row of the feed.
+   */
+  @Column({ name: 'comment_count', type: 'int', default: 0 })
+  commentCount: number;
+
+  /**
    * Distinct viewers, denormalized from `listing_views` the same way the
    * rating is: every feed and card query already selects this entity, so the
    * number costs nothing to show and a COUNT per card would cost a lot.

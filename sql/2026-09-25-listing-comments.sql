@@ -54,3 +54,21 @@ CREATE TABLE IF NOT EXISTS listing_comment_likes (
 );
 
 COMMIT;
+
+-- Top-level comments per listing, so a card can show the number beside its
+-- comment icon without a query per row of the feed.
+BEGIN;
+
+ALTER TABLE listings
+  ADD COLUMN IF NOT EXISTS comment_count integer NOT NULL DEFAULT 0;
+
+-- Backfill for listings that already have a thread.
+UPDATE listings l
+   SET comment_count = s.cnt
+  FROM (SELECT listing_id, COUNT(*) AS cnt
+          FROM listing_comments
+         WHERE parent_id IS NULL
+         GROUP BY listing_id) s
+ WHERE l.id = s.listing_id;
+
+COMMIT;

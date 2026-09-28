@@ -175,6 +175,8 @@ export class CommentsService {
       return comment;
     });
 
+    await this.recount(listingId);
+
     const authors = await this.authorMap([authorId]);
     return this.shape(saved, authors, new Set());
   }
@@ -238,6 +240,7 @@ export class CommentsService {
     }
 
     await this.deleteWithReplies(comment);
+    await this.recount(listingId);
     return { success: true };
   }
 
@@ -312,6 +315,7 @@ export class CommentsService {
     if (!comment) throw new NotFoundException('Comment not found');
 
     await this.deleteWithReplies(comment);
+    await this.recount(comment.listingId);
     return { success: true };
   }
 
@@ -496,6 +500,24 @@ export class CommentsService {
           },
         ];
       }),
+    );
+  }
+
+  /**
+   * Push the top-level count onto the listing.
+   *
+   * Recomputed rather than incremented: deleting a thread takes its replies
+   * with it, and an increment would have to know how many of those were
+   * top-level. Replies are excluded — "4 comments" on a card means four
+   * conversations, not four lines.
+   */
+  private async recount(listingId: string) {
+    await this.listings.query(
+      `UPDATE listings l
+          SET comment_count = (SELECT COUNT(*) FROM listing_comments
+                                WHERE listing_id = $1 AND parent_id IS NULL)
+        WHERE l.id = $1`,
+      [listingId],
     );
   }
 
