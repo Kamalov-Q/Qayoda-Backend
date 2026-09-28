@@ -540,9 +540,32 @@ function applyFloors(
   }
 }
 
+/**
+ * The plain-text copy of a description, for search and for screens that do
+ * not parse HTML.
+ *
+ * Line breaks are kept. The old version turned every tag into a space and
+ * then collapsed all whitespace, which flattened a carefully laid-out advert
+ * — bullets, blank lines and all — into one run-on paragraph. Sellers paste
+ * these out of Telegram; the layout is most of what they wrote.
+ *
+ * Horizontal runs still collapse, so indentation and double spaces do not
+ * survive. Only three or more blank lines are trimmed, to stop a paste with
+ * a dozen empty lines stretching the card.
+ */
 function stripHtml(html: string): string {
   return html
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/\s+/g, ' ')
+    .replace(/<\s*br\s*\/?>/gi, '\n')
+    .replace(/<\/\s*(p|div|li|h[1-6])\s*>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/[ \t]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
