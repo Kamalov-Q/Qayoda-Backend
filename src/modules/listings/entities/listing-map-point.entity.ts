@@ -30,5 +30,13 @@ export class ListingMapPoint {
     string | null;
   /** Denormalised for the viewport's address filter — never returned to clients. */
   @Column({ type: 'text', nullable: true }) address: string | null;
+
+  /**
+   * Denormalised for the viewport's search, which is "title or address" —
+   * never returned to clients. Without it the search box matched only
+   * addresses once the map zoomed out to points, so typing a listing's name
+   * emptied the map while filling the list.
+   */
+  @Column({ type: 'text', nullable: true }) title: string | null;
   @UpdateDateColumn({ name: 'updated_at' }) updatedAt: Date;
 }

@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, IsNull, Repository } from 'typeorm';
 import { ListingComment, ListingCommentLike } from './comment.entity';
 import { Listing } from '../listings/entities/listing.entity';
+import { ListingLiveGateway } from '../live/listing-live.gateway';
 import { User } from '../users/entities/user.entity';
 import { UserRole } from '../../shared/enums';
 import {
@@ -45,6 +46,7 @@ export class CommentsService {
     @InjectRepository(Listing) private readonly listings: Repository<Listing>,
     @InjectRepository(User) private readonly users: Repository<User>,
     private readonly ds: DataSource,
+    private readonly live: ListingLiveGateway,
   ) {}
 
   /**
@@ -519,6 +521,18 @@ export class CommentsService {
         WHERE l.id = $1`,
       [listingId],
     );
+
+    // Read back rather than RETURNING: TypeORM's `query()` hands back
+    // `[rows, affected]` for an UPDATE, not the rows — which silently
+    // broadcast an empty patch until a live socket test caught it.
+    const row = await this.listings.findOne({
+      where: { id: listingId },
+      select: { id: true, commentCount: true },
+    });
+
+    // Everyone reading that listing sees the number move as it happens, the
+    // same way the view count does.
+    if (row) this.live.broadcast(listingId, { commentCount: row.commentCount });
   }
 
   /** A comment and everything hanging off it, in one transaction. */

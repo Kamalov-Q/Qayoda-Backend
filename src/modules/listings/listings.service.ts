@@ -241,6 +241,7 @@ export class ListingsService {
       priceMin: dto.priceMin,
       priceMax: dto.priceMax,
       search: dto.q?.trim() || undefined,
+      address: dto.address?.trim() || undefined,
       centerLng: dto.centerLng,
       centerLat: dto.centerLat,
       radiusM: dto.radiusM,

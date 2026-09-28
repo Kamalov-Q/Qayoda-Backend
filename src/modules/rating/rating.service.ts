@@ -12,6 +12,7 @@ import {
   REPORT_OWNER_WEIGHT,
   REPORT_STARS,
 } from './rating.constants';
+import { ListingLiveGateway } from '../live/listing-live.gateway';
 
 /** One side of the sum: how loud a voice is, and what it said. */
 interface Vote {
@@ -37,7 +38,10 @@ const decayOf = (column: string) => DECAY.replace('%COL%', column);
 
 @Injectable()
 export class RatingService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly live: ListingLiveGateway,
+  ) {}
 
   /**
    * The one place a rating is decided.
@@ -142,6 +146,16 @@ export class RatingService {
         rows.map((r) => r.count),
       ],
     );
+
+    // Anyone reading one of these listings sees its stars move now rather
+    // than on their next visit. Whole-shelf recomputes go out row by row —
+    // a reader is in one listing's room, not the seller's.
+    for (const row of rows) {
+      this.live.broadcast(row.id, {
+        ratingAvg: row.avg,
+        ratingCount: row.count,
+      });
+    }
   }
 
   /** One listing — the common case, after a review lands. */

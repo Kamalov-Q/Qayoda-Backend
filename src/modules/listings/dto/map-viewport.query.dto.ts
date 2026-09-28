@@ -121,6 +121,18 @@ export class MapViewportQueryDto {
   address?: string;
 
   @ApiPropertyOptional({
+    example: 'Chilonzor',
+    description:
+      'Free search over the title AND the address — what the search box on ' +
+      'the sale tab sends. Narrows alongside `address`, which matches the ' +
+      'address only.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  q?: string;
+
+  @ApiPropertyOptional({
     example: 69.24,
     description:
       'Centre of a radius filter, with `centerLat` and `radiusM`. All three ' +

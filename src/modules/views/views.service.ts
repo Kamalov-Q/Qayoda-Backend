@@ -21,8 +21,9 @@ export class ViewsService {
   /**
    * Record that someone opened this listing, and say what the count is now.
    *
-   * Returns the current number in every case, including the ones it refuses
-   * to count — the screen showing it should not have to care why.
+   * One row per viewer, so the number means "how many people", not "how many
+   * page opens". Returns the current count in every case, including the ones
+   * it refuses to record — the screen showing it should not have to care why.
    */
   async record(
     listingId: string,
@@ -31,16 +32,16 @@ export class ViewsService {
   ): Promise<ViewResult> {
     const listing = await this.listings.findOne({
       where: { id: listingId },
-      select: { id: true, ownerId: true, viewCount: true },
+      select: { id: true, viewCount: true },
     });
     if (!listing) throw new NotFoundException('Listing not found');
 
-    // Owners re-reading their own advert would otherwise inflate the only
-    // number they are watching.
-    if (userId && listing.ownerId === userId) {
-      return { viewCount: listing.viewCount, counted: false };
-    }
-
+    // The owner counts like anybody else. They used to be skipped, on the
+    // grounds that the person reading the number should not be able to move
+    // it — but the count is distinct VIEWERS, so opening their own advert a
+    // hundred times still adds exactly one, and a fresh listing reading "0"
+    // while its owner is looking straight at it reads as broken rather than
+    // as honest.
     const key = userId
       ? `u:${userId}`
       : deviceId

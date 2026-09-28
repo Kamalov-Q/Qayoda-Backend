@@ -32,12 +32,14 @@ export class ListingRepository extends Repository<Listing> {
    * The browsable feed: every ACTIVE listing, filtered and paged. Search goes
    * through title and address — the two fields people actually type.
    */
-  findFeed(q: {
+  async findFeed(q: {
     purpose: string;
     category?: string;
     priceMin?: number;
     priceMax?: number;
     search?: string;
+    /** Address only, unlike `search`, which also matches the title. */
+    address?: string;
     /** All three together, or none — a centre without a radius means nothing. */
     centerLng?: number;
     centerLat?: number;
@@ -45,37 +47,47 @@ export class ListingRepository extends Repository<Listing> {
     sort: 'newest' | 'priceAsc' | 'priceDesc';
     limit: number;
     offset: number;
-  }) {
-    const qb = this.createQueryBuilder('l')
-      .leftJoinAndSelect('l.offers', 'offer')
-      .leftJoinAndSelect('l.images', 'image')
-      // The purpose/price filter must run on its own join, or the joined-in
-      // `offer` rows themselves get filtered and rent prices vanish from
-      // cards on the SALE feed.
-      .innerJoin(
-        'l.offers',
-        'match',
-        'match.purpose = :purpose AND match.isActive = true',
-        { purpose: q.purpose },
-      )
+  }): Promise<Listing[]> {
+    // Ids first, then a plain relation fetch — the same two-step findSimilar
+    // and findPublicByOwner use, and for the same reason: a query that joins
+    // the offers and images needs TypeORM's DISTINCT-ids wrapper to page, and
+    // that wrapper cannot order by a column it does not select. The previous
+    // fix for that (`addSelect` of the joined price) made every price-sorted
+    // request answer 500, and once the alias was right it hydrated `offers`
+    // from the ordering join — so every listing came back with its offers
+    // duplicated and stripped to a single field.
+    const ids = this.createQueryBuilder('l')
+      .select('l.id', 'id')
       .where('l.status = :status', { status: ListingStatus.ACTIVE });
 
-    if (q.category) qb.andWhere('l.category = :category', { category: q.category });
-    // Bounds arrive in USD; priceUsd is the currency-blind comparison column.
-    if (q.priceMin !== undefined)
-      qb.andWhere('match.priceUsd >= :priceMin', { priceMin: q.priceMin });
-    if (q.priceMax !== undefined)
-      qb.andWhere('match.priceUsd <= :priceMax', { priceMax: q.priceMax });
+    // EXISTS rather than a join: the price bounds belong to the offer that
+    // matches the purpose, and a join would also multiply the row by every
+    // offer and image the listing has.
+    const offerConditions = ['o.listing_id = l.id', 'o.is_active = true', 'o.purpose = :purpose'];
+    if (q.priceMin !== undefined) offerConditions.push('o.price_usd >= :priceMin');
+    if (q.priceMax !== undefined) offerConditions.push('o.price_usd <= :priceMax');
+    ids.andWhere(
+      `EXISTS (SELECT 1 FROM listing_offers o WHERE ${offerConditions.join(' AND ')})`,
+      { purpose: q.purpose, priceMin: q.priceMin, priceMax: q.priceMax },
+    );
+
+    if (q.category) ids.andWhere('l.category = :category', { category: q.category });
     if (q.search) {
-      qb.andWhere('(l.title ILIKE :search OR l.address ILIKE :search)', {
+      ids.andWhere('(l.title ILIKE :search OR l.address ILIKE :search)', {
         search: `%${q.search.replace(/[\\%_]/g, '\\$&')}%`,
       });
     }
-
+    // The funnel sheet's own address field. It used to reach the map and
+    // nothing else, so switching to the list silently widened the search.
+    if (q.address) {
+      ids.andWhere('l.address ILIKE :address', {
+        address: `%${q.address.replace(/[\\%_]/g, '\\$&')}%`,
+      });
+    }
     // Same rule as the map: a listing is in or out by its centroid, so the
     // circle drawn on the map and the list behind it agree.
     if (q.centerLng != null && q.centerLat != null && q.radiusM) {
-      qb.andWhere(
+      ids.andWhere(
         `ST_DWithin(
            l.centroid,
            ST_SetSRID(ST_MakePoint(:centerLng, :centerLat), 4326)::geography,
@@ -86,17 +98,46 @@ export class ListingRepository extends Repository<Listing> {
     }
 
     if (q.sort === 'newest') {
-      qb.orderBy('l.publishedAt', 'DESC');
+      ids.orderBy('l.published_at', 'DESC', 'NULLS LAST');
     } else {
-      // skip/take wraps the query in a DISTINCT-ids subquery, and Postgres
-      // refuses to ORDER BY a joined column that subquery does not select —
-      // "column distinctAlias.match_price does not exist". Selecting it under
-      // the exact alias TypeORM will reference makes the wrapper legal.
-      qb.addSelect('match.priceUsd', 'match_price');
-      qb.orderBy('match.priceUsd', q.sort === 'priceAsc' ? 'ASC' : 'DESC');
+      // The cheapest live offer of the purpose being browsed. A listing with
+      // no comparable price sorts last either way — it is not cheap, its
+      // price is unknown.
+      ids
+        .addSelect(
+          `(SELECT MIN(o.price_usd) FROM listing_offers o
+             WHERE o.listing_id = l.id AND o.is_active = true
+               AND o.purpose = :purpose)`,
+          'sort_price',
+        )
+        .orderBy('sort_price', q.sort === 'priceAsc' ? 'ASC' : 'DESC', 'NULLS LAST');
     }
 
-    return qb.skip(q.offset).take(q.limit).getMany();
+    const rows = await ids
+      // limit/offset, not take/skip: these are raw rows, so there is no
+      // entity hydration for take/skip to protect.
+      .limit(q.limit)
+      .offset(q.offset)
+      .getRawMany<{ id: string }>();
+
+    return this.findManyInOrder(rows.map((r) => r.id));
+  }
+
+  /**
+   * Listings with their offers and images, in the order the ids were given.
+   * `find` returns them in whatever order Postgres liked, and the order is
+   * the whole point of the query that produced the ids.
+   */
+  private async findManyInOrder(ids: string[]): Promise<Listing[]> {
+    if (!ids.length) return [];
+
+    const items = await this.find({
+      where: { id: In(ids) },
+      relations: { offers: true, images: true },
+    });
+    const byId = new Map(items.map((l) => [l.id, l]));
+
+    return ids.map((id) => byId.get(id)).filter((l): l is Listing => !!l);
   }
 
   /**
@@ -230,19 +271,8 @@ export class ListingRepository extends Repository<Listing> {
       .offset(offset)
       .getRawMany<{ id: string }>();
 
-    const ids = rows.map((r) => r.id);
-    if (!ids.length) return { items: [], total };
-
-    const items = await this.find({
-      where: { id: In(ids) },
-      relations: { offers: true, images: true },
-    });
-    const byId = new Map(items.map((l) => [l.id, l]));
-
-    // `find` returns them in whatever order Postgres liked; the sort lives in
-    // the id query, so it is reapplied here.
     return {
-      items: ids.map((id) => byId.get(id)).filter((l): l is Listing => !!l),
+      items: await this.findManyInOrder(rows.map((r) => r.id)),
       total,
     };
   }

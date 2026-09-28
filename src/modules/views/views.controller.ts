@@ -12,20 +12,20 @@ import { OptionalJwtGuard } from '../auth/guards/optional-jwt.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthUser } from '../auth/types/auth-user.type';
 import { ViewsService } from './views.service';
-import { ViewsGateway } from './views.gateway';
+import { ListingLiveGateway } from '../live/listing-live.gateway';
 
 @ApiTags('Listings')
 @Controller('listings/:id')
 export class ViewsController {
   constructor(
     private readonly views: ViewsService,
-    private readonly gateway: ViewsGateway,
+    private readonly gateway: ListingLiveGateway,
   ) {}
 
   @ApiOperation({
     summary: 'Record that you opened this listing',
     description: [
-      'One view per person: a signed-in caller is counted by user id, a guest by the `X-Device-Id` header the app generates once and keeps. Repeat visits do not add to the count, and owners viewing their own listing are not counted at all.',
+      'One view per person: a signed-in caller is counted by user id, a guest by the `X-Device-Id` header the app generates once and keeps. Repeat visits do not add to the count. The owner counts too — as one viewer, however often they look.',
       '',
       'Returns the current count either way, and pushes it to everyone watching this listing on the `/listings` websocket namespace.',
     ].join('\n'),
@@ -50,7 +50,7 @@ export class ViewsController {
     // Only when it moved: a re-read by the same person would otherwise
     // re-render the number on every other device for no reason.
     if (result.counted) {
-      this.gateway.broadcast(id, result.viewCount);
+      this.gateway.broadcast(id, { viewCount: result.viewCount });
     }
     return result;
   }

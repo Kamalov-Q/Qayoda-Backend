@@ -55,6 +55,18 @@ export class ListListingsDto {
   @MaxLength(120)
   q?: string;
 
+  @ApiPropertyOptional({
+    example: 'Chilonzor',
+    description:
+      'Matches the address only, case-insensitively. The same filter the ' +
+      'map takes, so switching between the two views keeps it.',
+  })
+  @IsOptional()
+  @IsString()
+  @Transform(trim)
+  @MaxLength(120)
+  address?: string;
+
   @ApiPropertyOptional({ enum: ['newest', 'priceAsc', 'priceDesc'] })
   @IsOptional()
   @IsIn(['newest', 'priceAsc', 'priceDesc'])

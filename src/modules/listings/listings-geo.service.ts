@@ -83,6 +83,14 @@ export class ListingsGeoService {
       params.push(toLikePattern(q.address));
       addressFilter = `AND l.address ILIKE $${++i}`;
     }
+    // The search box, which is labelled "title or address" and has to mean it.
+    // Separate from `address` above so the two narrow together rather than one
+    // quietly replacing the other.
+    let searchFilter = '';
+    if (q.q) {
+      params.push(toLikePattern(q.q));
+      searchFilter = `AND (l.title ILIKE $${++i} OR l.address ILIKE $${i})`;
+    }
     // Appends its own three parameters, so it must come after every other
     // `++i` above — the placeholders are positional.
     const radiusFilter = this.radiusFilter(q, params, 'l.centroid');
@@ -104,7 +112,7 @@ export class ListingsGeoService {
   WHERE l.status = 'ACTIVE'
     AND l.centroid IS NOT NULL
     AND ST_Intersects(COALESCE(l.geom, l.centroid), ST_MakeEnvelope($2, $3, $4, $5, 4326))
-    ${categoryFilter} ${priceMinFilter} ${priceMaxFilter} ${addressFilter} ${radiusFilter}
+    ${categoryFilter} ${priceMinFilter} ${priceMaxFilter} ${addressFilter} ${searchFilter} ${radiusFilter}
   ORDER BY l.published_at DESC NULLS LAST
   -- 200, not 500: every feature becomes a live view on the client map, and
   -- Expo Go gets jetsammed long before 500 custom markers render.
@@ -163,6 +171,14 @@ export class ListingsGeoService {
       // address search — which is the right reading of "filter by address".
       addressFilter = `AND address ILIKE $${++i}`;
     }
+    // Same search as the polygon branch. `title` is denormalised onto this
+    // projection for exactly this: without it the search box matched only
+    // addresses at the zoom levels where the map draws points.
+    let searchFilter = '';
+    if (q.q) {
+      params.push(toLikePattern(q.q));
+      searchFilter = `AND (title ILIKE $${++i} OR address ILIKE $${i})`;
+    }
     const radiusFilter = this.radiusFilter(q, params, 'centroid');
 
     return this.dataSource.query<ViewportPointFeature[]>(
@@ -175,7 +191,7 @@ export class ListingsGeoService {
       FROM listing_map_points
       WHERE purpose = $1
         AND ST_Intersects(centroid, ST_MakeEnvelope($2, $3, $4, $5, 4326))
-        ${categoryFilter} ${priceMinFilter} ${priceMaxFilter} ${addressFilter} ${radiusFilter}
+        ${categoryFilter} ${priceMinFilter} ${priceMaxFilter} ${addressFilter} ${searchFilter} ${radiusFilter}
       -- Same memory math as the polygon branch.
       LIMIT 300
       `,

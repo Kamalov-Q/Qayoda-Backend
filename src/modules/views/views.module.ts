@@ -5,13 +5,13 @@ import { ListingView } from './listing-view.entity';
 import { Listing } from '../listings/entities/listing.entity';
 import { ViewsService } from './views.service';
 import { ViewsController } from './views.controller';
-import { ViewsGateway } from './views.gateway';
 
-/** Distinct-viewer counts on listings, with live updates over `/listings`. */
+/** Distinct-viewer counts on listings. The live push goes out through
+ *  LiveModule's gateway, which comments and ratings share. */
 @Module({
   imports: [TypeOrmModule.forFeature([ListingView, Listing]), AuthModule],
   controllers: [ViewsController],
-  providers: [ViewsService, ViewsGateway],
+  providers: [ViewsService],
   exports: [ViewsService],
 })
 export class ViewsModule {}
