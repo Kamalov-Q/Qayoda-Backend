@@ -15,7 +15,11 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { BuildingType, SellerType } from '../enums/seller-type.enum';
+import {
+  BuildingType,
+  RepairType,
+  SellerType,
+} from '../enums/seller-type.enum';
 import { OfferPurpose } from '../enums/offer-purpose.enum';
 import { Type } from 'class-transformer';
 import { CATEGORY_SLUG } from '../../categories/categories.constants';
@@ -102,6 +106,15 @@ export class CreateListingDto {
   @IsOptional()
   @IsEnum(SellerType)
   sellerType?: SellerType;
+
+  @ApiPropertyOptional({
+    enum: RepairType,
+    description:
+      'State of repair, from NEEDS_REPAIR to CAPITAL. Optional — a seller who does not say is not the same as one who says "needs work".',
+  })
+  @IsOptional()
+  @IsEnum(RepairType)
+  repairType?: RepairType;
 
   @ApiPropertyOptional({
     enum: BuildingType,

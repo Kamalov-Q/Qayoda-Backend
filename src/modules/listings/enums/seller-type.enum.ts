@@ -15,3 +15,22 @@ export enum BuildingType {
   NEW = 'NEW',
   SECONDARY = 'SECONDARY',
 }
+
+/**
+ * State of repair — the answer that decides whether a price is good.
+ *
+ * Six levels rather than a yes/no, because "ta'mirlangan" covers everything
+ * from fresh paint to a full designer fit-out, and buyers filter on the
+ * difference. The existing REPAIRED amenity stays for listings posted before
+ * this field existed.
+ */
+export enum RepairType {
+  /** Needs work before anyone can live in it. */
+  NEEDS_REPAIR = 'NEEDS_REPAIR',
+  AVERAGE = 'AVERAGE',
+  COSMETIC = 'COSMETIC',
+  EURO = 'EURO',
+  DESIGNER = 'DESIGNER',
+  /** Structural: rewired, replumbed, walls moved. */
+  CAPITAL = 'CAPITAL',
+}

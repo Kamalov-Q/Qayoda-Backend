@@ -9,7 +9,11 @@ import {
   Index,
 } from 'typeorm';
 import { ListingStatus } from '../enums/listing-status.enum';
-import { BuildingType, SellerType } from '../enums/seller-type.enum';
+import {
+  BuildingType,
+  RepairType,
+  SellerType,
+} from '../enums/seller-type.enum';
 import { ListingImage } from './listing-image.entity';
 import { ListingOffer } from './listing-offer.entity';
 import type { GeoJsonPoint, GeoJsonPolygon } from '../types/geojson.type';
@@ -65,6 +69,16 @@ export class Listing {
     nullable: true,
   })
   sellerType: SellerType | null;
+
+  /** How finished it is. Null when the seller skipped it. */
+  @Index()
+  @Column({
+    name: 'repair_type',
+    type: 'enum',
+    enum: RepairType,
+    nullable: true,
+  })
+  repairType: RepairType | null;
 
   /** New build or resale. Null for land, and for older listings. */
   @Index()
