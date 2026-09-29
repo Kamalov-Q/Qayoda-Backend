@@ -4,6 +4,9 @@
  *   npm run seed:listings                  # spreads them over existing users
  *   npm run seed:listings -- --owner +998901234567
  *
+ * Safe to re-run: a seed whose title is already in the database is left
+ * alone, so a second run adds only what is genuinely new.
+ *
  * Created through ListingsService, not SQL: that is what validates the
  * category, derives the area from a drawn boundary, normalises prices to USD
  * and publishes the event that puts a listing on the map. Seed rows written
@@ -18,6 +21,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AppModule } from '../app.module';
 import { User } from '../modules/users/entities/user.entity';
+import { Listing } from '../modules/listings/entities/listing.entity';
 import { ListingsService } from '../modules/listings/listings.service';
 import { CategoriesService } from '../modules/categories/categories.service';
 import { CreateListingDto } from '../modules/listings/dto/create-listing.dto';
@@ -384,6 +388,7 @@ async function main() {
 
   try {
     const users = app.get<Repository<User>>(getRepositoryToken(User));
+    const listingRepo = app.get<Repository<Listing>>(getRepositoryToken(Listing));
     const listings = app.get(ListingsService, { strict: false });
     const categories = app.get(CategoriesService, { strict: false });
 
@@ -409,10 +414,34 @@ async function main() {
     // rather than failing the whole run.
     const live = new Set((await categories.listPublic()).map((c) => c.slug));
 
+    // What is already here, by title. Re-running the seed used to post a
+    // second copy of every listing — same title, same coordinates, different
+    // id — which is invisible on the map (the two markers sit exactly on top
+    // of one another) and shows up only as a count that disagrees with what
+    // you can see. Titles are the seed's own, and unique within it.
+    const seedTitles = LISTINGS.map((seed) => seed.title).filter(
+      (title): title is string => !!title,
+    );
+    const existing = new Set(
+      (
+        await listingRepo.find({
+          select: { id: true, title: true },
+          where: seedTitles.map((title) => ({ title })),
+        })
+      )
+        .map((l) => l.title)
+        .filter((title): title is string => !!title),
+    );
+
     let created = 0;
+    let skipped = 0;
     for (const [i, seed] of LISTINGS.entries()) {
       if (!live.has(seed.category)) {
         console.warn(`- skipped "${seed.title}": category ${seed.category} is not active`);
+        continue;
+      }
+      if (seed.title && existing.has(seed.title)) {
+        skipped++;
         continue;
       }
       const owner = owners[i % owners.length];
@@ -425,12 +454,18 @@ async function main() {
       console.log(`+ ${seed.title}  (${owner.name ?? owner.phoneNumber})`);
     }
 
-    // The map projection runs off the outbox relay, which polls once a second.
-    // Closing immediately would leave these listings off the map until the
-    // next server restart picks the events up.
-    console.log('Waiting for the map projection…');
-    await new Promise((r) => setTimeout(r, 4000));
-    console.log(`Done: ${created} listing(s).`);
+    if (skipped) {
+      console.log(`= ${skipped} already here, left alone.`);
+    }
+
+    if (created) {
+      // The map projection runs off the outbox relay, which polls once a
+      // second. Closing immediately would leave these listings off the map
+      // until the next server restart picks the events up.
+      console.log('Waiting for the map projection…');
+      await new Promise((r) => setTimeout(r, 4000));
+    }
+    console.log(`Done: ${created} listing(s) created.`);
   } finally {
     await app.close();
   }
