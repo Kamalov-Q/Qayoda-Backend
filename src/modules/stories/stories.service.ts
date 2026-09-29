@@ -105,6 +105,44 @@ export class StoriesService {
     return { groups };
   }
 
+  /**
+   * One person's stories, for their profile.
+   *
+   * Live ones for anybody. Expired ones only for the person who posted them —
+   * that is what a Telegram-style archive is: a private record of what you
+   * put up, not a way to read what somebody else meant to be temporary.
+   */
+  async byAuthor(
+    authorId: string,
+    viewerId: string | null,
+    includeExpired: boolean,
+  ) {
+    const archive = includeExpired && viewerId === authorId;
+    const now = new Date();
+
+    const rows = await this.stories.find({
+      where: archive
+        ? { authorId }
+        : { authorId, expiresAt: MoreThan(now) },
+      order: { createdAt: 'DESC' },
+      take: 60,
+    });
+
+    const seen = await this.seenSet(
+      viewerId,
+      rows.map((r) => r.id),
+    );
+
+    return {
+      /** Whether the caller is looking at their own archive. */
+      archive,
+      items: rows.map((story) => ({
+        ...this.shape(story, seen.has(story.id)),
+        expired: story.expiresAt.getTime() <= now.getTime(),
+      })),
+    };
+  }
+
   /** One story, with the viewer's own reaction on it. */
   async get(storyId: string, viewerId: string | null) {
     const story = await this.mustExist(storyId);

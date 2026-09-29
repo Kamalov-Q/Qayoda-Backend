@@ -61,6 +61,28 @@ export class StoriesController {
     return this.stories.create(user.sub, dto);
   }
 
+  @ApiOperation({
+    summary: "One person's stories",
+    description: [
+      'What their profile shows. Live stories for anybody.',
+      '',
+      'With `includeExpired=true` and your own id, it also returns the ones that have run out — the archive. Asking for somebody else’s expired stories simply returns their live ones: what a person put up for a day is not something to be read back later by strangers.',
+    ].join('\n'),
+  })
+  @UseGuards(OptionalJwtGuard)
+  @Get('by-user/:id')
+  byUser(
+    @CurrentUser() user: AuthUser | null,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('includeExpired') includeExpired?: string,
+  ) {
+    return this.stories.byAuthor(
+      id,
+      user?.sub ?? null,
+      includeExpired === 'true',
+    );
+  }
+
   @ApiOperation({ summary: 'One story' })
   @ApiNotFoundResponse({ type: ErrorResponse })
   @UseGuards(OptionalJwtGuard)
