@@ -33,7 +33,20 @@ import {
 
 const MAX_FILES = 30;
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
-const MAX_CHAT_FILE_SIZE = 50 * 1024 * 1024;
+/**
+ * The ceiling on one upload.
+ *
+ * Must stay AT OR BELOW nginx's `client_max_body_size` (see
+ * /etc/nginx/sites-available/uynest): the proxy rejects a bigger body with an
+ * HTML page, before the API can explain itself, and the app then has nothing
+ * to tell the user but "upload failed".
+ *
+ * Raising it is not free — Multer's default storage holds the whole file in
+ * memory, and the video path then writes a second copy to /tmp for ffmpeg, so
+ * one 64MB upload costs ~128MB on a 2GB box. Past this, move this endpoint to
+ * disk storage rather than raising the number again.
+ */
+const MAX_CHAT_FILE_SIZE = 64 * 1024 * 1024;
 
 const ATTACHMENT_KINDS = [
   'IMAGE',

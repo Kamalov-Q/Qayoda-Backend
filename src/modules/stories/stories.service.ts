@@ -247,14 +247,14 @@ export class StoriesService {
   /**
    * Records that this person watched it, and returns the count now.
    *
-   * Signed-in only, and never the author: a "seen by" list exists so the
-   * poster can see who looked, and their own face in it tells them nothing.
+   * The author counts like anybody else. They were skipped at first, on the
+   * grounds that their own face in their own "seen by" list tells them
+   * nothing — but a story you posted and watched reading "0 views" reads as
+   * broken rather than as tactful, and the count is distinct PEOPLE, so
+   * opening it twenty times still adds one.
    */
   async markSeen(storyId: string, viewerId: string) {
-    const story = await this.mustExist(storyId);
-    if (story.authorId === viewerId) {
-      return { viewCount: story.viewCount, counted: false };
-    }
+    await this.mustExist(storyId);
 
     const result = await this.views
       .createQueryBuilder()
@@ -270,7 +270,13 @@ export class StoriesService {
     // `raw` is what RETURNING actually gave back — empty when the row was
     // already there, which is how a second viewing stays one viewer.
     const counted = Array.isArray(result.raw) && result.raw.length > 0;
-    if (!counted) return { viewCount: story.viewCount, counted: false };
+    if (!counted) {
+      const current = await this.stories.findOne({
+        where: { id: storyId },
+        select: { id: true, viewCount: true },
+      });
+      return { viewCount: current?.viewCount ?? 0, counted: false };
+    }
 
     const viewCount = await this.recount(storyId, 'view_count', 'story_views');
     return { viewCount, counted: true };
