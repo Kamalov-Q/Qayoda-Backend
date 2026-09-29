@@ -15,6 +15,14 @@
 -- The COPY IT KEEPS is the oldest, which is the one people have been looking
 -- at — it carries the views, the reviews and any conversation.
 --
+-- WHAT COUNTS AS A COPY is deliberately strict: the same owner, title, point,
+-- room count, area, floor, storeys AND description. Two flats in one building
+-- are a perfectly ordinary thing to advertise, and they differ in at least
+-- one of those — a floor, a price, a line of description. Anything that
+-- differs anywhere is left alone, even if both pins sit on the same roof;
+-- the map draws those as one bubble with a count, which is the honest way to
+-- show them.
+--
 --   psql "$DATABASE_URL" -f sql/2026-09-30-dedupe-seed-listings.sql
 
 BEGIN;
@@ -23,7 +31,8 @@ BEGIN;
 WITH ranked AS (
   SELECT id, title, owner_id, created_at,
          ROW_NUMBER() OVER (
-           PARTITION BY owner_id, title, ST_AsText(centroid::geometry)
+           PARTITION BY owner_id, title, ST_AsText(centroid::geometry),
+                        rooms, area_m2, floor, total_floors, description_text
            ORDER BY created_at ASC
          ) AS copy_number
     FROM listings
@@ -37,7 +46,8 @@ SELECT copy_number - 1 AS duplicates_of_this_listing, title
 WITH ranked AS (
   SELECT id,
          ROW_NUMBER() OVER (
-           PARTITION BY owner_id, title, ST_AsText(centroid::geometry)
+           PARTITION BY owner_id, title, ST_AsText(centroid::geometry),
+                        rooms, area_m2, floor, total_floors, description_text
            ORDER BY created_at ASC
          ) AS copy_number
     FROM listings
