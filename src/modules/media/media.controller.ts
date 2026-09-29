@@ -165,4 +165,33 @@ export class MediaController {
       throw new BadRequestException('Invalid kind');
     return this.mediaService.processChatAttachment(file, kind);
   }
+
+  @ApiOperation({
+    summary: 'Upload a photo or a video for a story',
+    description: [
+      'Same processing as a chat attachment — images are re-encoded and thumbed, videos are probed for their duration and given a poster frame — under its own path so the two can diverge later without a migration of callers.',
+      '',
+      'Returns the URLs to hand to POST /stories. Only IMAGE and VIDEO: a story is something to look at.',
+    ].join('\n'),
+  })
+  @ApiBadRequestResponse({
+    type: ErrorResponse,
+    description: `The file exceeded ${MAX_CHAT_FILE_SIZE / 1024 / 1024}MB.`,
+  })
+  @UseGuards(JwtAccessGuard)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @Post('stories/upload')
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: MAX_CHAT_FILE_SIZE } }),
+  )
+  uploadStoryMedia(
+    @UploadedFile() file: Express.Multer.File,
+    @Query('kind') kind: AttachmentKind,
+  ) {
+    if (!file) throw new BadRequestException('Upload a file');
+    if (kind !== 'IMAGE' && kind !== 'VIDEO') {
+      throw new BadRequestException('A story is a photo or a video');
+    }
+    return this.mediaService.processChatAttachment(file, kind);
+  }
 }
