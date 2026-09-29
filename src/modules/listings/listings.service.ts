@@ -78,6 +78,21 @@ export class ListingsService {
         message: `floor / totalFloors are not used for ${category.nameUz} listings`,
       });
     }
+    // Same rule for the other two optional questions: the app hides them for
+    // a category that does not ask, and the API refuses them rather than
+    // storing an answer the category says cannot exist.
+    if (!category.buildingTypeCapable && dto.buildingType != null) {
+      throw new BadRequestException({
+        code: 'BUILDING_TYPE_NOT_ALLOWED',
+        message: `buildingType is not used for ${category.nameUz} listings`,
+      });
+    }
+    if (!category.repairTypeCapable && dto.repairType != null) {
+      throw new BadRequestException({
+        code: 'REPAIR_TYPE_NOT_ALLOWED',
+        message: `repairType is not used for ${category.nameUz} listings`,
+      });
+    }
 
     const geom = dto.coordinates
       ? await this.geo.toValidatedPolygon(dto.coordinates)

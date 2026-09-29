@@ -12,6 +12,24 @@ import { Category } from './category.entity';
 import { DEFAULT_CATEGORIES } from './categories.constants';
 import { CreateCategoryDto, UpdateCategoryDto } from './dto/category.dto';
 
+/**
+ * The optional questions a category can switch off, and the columns that hold
+ * the answers.
+ *
+ * One list so that adding a question later is one line here rather than three
+ * more branches through create, update and delete — and so that "turning it
+ * off clears what was stored" cannot be implemented for one flag and
+ * forgotten for another.
+ */
+const CAPABILITIES = [
+  { flag: 'floorCapable', columns: ['floor', 'total_floors'] },
+  { flag: 'buildingTypeCapable', columns: ['building_type'] },
+  { flag: 'repairTypeCapable', columns: ['repair_type'] },
+] as const satisfies readonly {
+  flag: keyof Category;
+  columns: readonly string[];
+}[];
+
 @Injectable()
 export class CategoriesService implements OnApplicationBootstrap {
   private readonly logger = new Logger(CategoriesService.name);
@@ -65,14 +83,27 @@ export class CategoriesService implements OnApplicationBootstrap {
   async listPublic() {
     return [...(await this.all()).values()]
       .filter((c) => c.isActive)
-      .map(({ slug, nameUz, nameRu, icon, sortOrder, floorCapable }) => ({
-        slug,
-        nameUz,
-        nameRu,
-        icon,
-        sortOrder,
-        floorCapable,
-      }));
+      .map(
+        ({
+          slug,
+          nameUz,
+          nameRu,
+          icon,
+          sortOrder,
+          floorCapable,
+          buildingTypeCapable,
+          repairTypeCapable,
+        }) => ({
+          slug,
+          nameUz,
+          nameRu,
+          icon,
+          sortOrder,
+          floorCapable,
+          buildingTypeCapable,
+          repairTypeCapable,
+        }),
+      );
   }
 
   /** Every category, hidden ones included, with how many listings use each. */
@@ -134,6 +165,8 @@ export class CategoriesService implements OnApplicationBootstrap {
         sortOrder: dto.sortOrder ?? Number(last?.max ?? -1) + 1,
         isActive: dto.isActive ?? true,
         floorCapable: dto.floorCapable ?? false,
+        buildingTypeCapable: dto.buildingTypeCapable ?? false,
+        repairTypeCapable: dto.repairTypeCapable ?? false,
       }),
     );
     this.invalidate();
@@ -144,16 +177,21 @@ export class CategoriesService implements OnApplicationBootstrap {
     const category = await this.categories.findOneBy({ slug });
     if (!category) throw new NotFoundException({ code: 'CATEGORY_NOT_FOUND' });
 
-    const losesFloors = category.floorCapable && dto.floorCapable === false;
+    // Every flag the admin just switched off. The values behind them are
+    // stale data now, not wrong input, so they are cleared rather than left
+    // to contradict the category — the same rule a single listing follows
+    // when it is refiled into a category that does not use them.
+    const cleared = CAPABILITIES.filter(
+      (c) => category[c.flag] && dto[c.flag] === false,
+    ).flatMap((c) => c.columns);
 
     await this.dataSource.transaction(async (m) => {
       await m.update(Category, { slug }, dto);
-      if (losesFloors) {
-        // The same rule a single listing follows when refiled into a
-        // floor-less category: the stored floors are stale data now, not
-        // wrong input, so they are cleared rather than left to contradict it.
+      if (cleared.length) {
         await m.query(
-          `UPDATE listings SET floor = NULL, total_floors = NULL WHERE category = $1`,
+          `UPDATE listings SET ${cleared
+            .map((column) => `${column} = NULL`)
+            .join(', ')} WHERE category = $1`,
           [slug],
         );
       }
@@ -202,10 +240,14 @@ export class CategoriesService implements OnApplicationBootstrap {
 
     await this.dataSource.transaction(async (m) => {
       if (target) {
+        // Anything the destination does not ask about is cleared on the way
+        // in, for the same reason as above.
+        const drop = CAPABILITIES.filter((c) => !target[c.flag])
+          .flatMap((c) => c.columns)
+          .map((column) => `, ${column} = NULL`)
+          .join('');
         await m.query(
-          `UPDATE listings SET category = $1${
-            target.floorCapable ? '' : ', floor = NULL, total_floors = NULL'
-          } WHERE category = $2`,
+          `UPDATE listings SET category = $1${drop} WHERE category = $2`,
           [target.slug, slug],
         );
         // The map's read model carries the category too.

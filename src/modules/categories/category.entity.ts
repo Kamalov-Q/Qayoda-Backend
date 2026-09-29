@@ -38,6 +38,21 @@ export class Category {
   @Column({ name: 'floor_capable', type: 'boolean', default: false })
   floorCapable: boolean;
 
+  /**
+   * Whether a listing in this category is a new build or a resale. A flat is
+   * one or the other; a plot of land is neither, and asking would only give
+   * the seller a question with no right answer.
+   */
+  @Column({ name: 'building_type_capable', type: 'boolean', default: false })
+  buildingTypeCapable: boolean;
+
+  /**
+   * Whether it makes sense to ask about the state of repair. Everything with
+   * walls has one; land does not.
+   */
+  @Column({ name: 'repair_type_capable', type: 'boolean', default: false })
+  repairTypeCapable: boolean;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' }) createdAt: Date;
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' }) updatedAt: Date;
 }

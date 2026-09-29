@@ -67,11 +67,33 @@ export class CreateCategoryDto {
 
   @ApiPropertyOptional({
     default: false,
-    description: 'Whether listings in it may have floor / total floors.',
+    description:
+      'Whether listings in it may have floor / total floors. Turning it off ' +
+      'clears the floors already stored on the listings in this category.',
   })
   @IsOptional()
   @IsBoolean()
   floorCapable?: boolean;
+
+  @ApiPropertyOptional({
+    default: false,
+    description:
+      'Whether the post form asks new build or resale. Off for land, which ' +
+      'is neither. Turning it off clears the value on existing listings.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  buildingTypeCapable?: boolean;
+
+  @ApiPropertyOptional({
+    default: false,
+    description:
+      'Whether the post form asks about the state of repair. Off for land. ' +
+      'Turning it off clears the value on existing listings.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  repairTypeCapable?: boolean;
 }
 
 /** Everything but the slug, which listings depend on. */

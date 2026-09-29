@@ -38,12 +38,14 @@ export const DEFAULT_CATEGORIES: {
   nameRu: string;
   icon: CategoryIconKey;
   floorCapable: boolean;
+  buildingTypeCapable: boolean;
+  repairTypeCapable: boolean;
 }[] = [
-  { slug: 'APARTMENT', nameUz: 'Kvartira', nameRu: 'Квартира', icon: 'apartment', floorCapable: true },
-  { slug: 'HOUSE', nameUz: 'Hovli', nameRu: 'Дом', icon: 'house', floorCapable: false },
-  { slug: 'LAND', nameUz: 'Yer', nameRu: 'Участок', icon: 'land', floorCapable: false },
-  { slug: 'NON_RESIDENTIAL', nameUz: 'Noturar joy', nameRu: 'Нежилое помещение', icon: 'shop', floorCapable: true },
-  { slug: 'BUILDING', nameUz: 'Bino', nameRu: 'Здание', icon: 'building', floorCapable: true },
-  { slug: 'DACHA', nameUz: 'Dacha', nameRu: 'Дача', icon: 'dacha', floorCapable: false },
-  { slug: 'HOTEL', nameUz: 'Mehmonxona', nameRu: 'Гостиница', icon: 'hotel', floorCapable: true },
+  { slug: 'APARTMENT', nameUz: 'Kvartira', nameRu: 'Квартира', icon: 'apartment', floorCapable: true, buildingTypeCapable: true, repairTypeCapable: true },
+  { slug: 'HOUSE', nameUz: 'Hovli', nameRu: 'Дом', icon: 'house', floorCapable: false, buildingTypeCapable: true, repairTypeCapable: true },
+  { slug: 'LAND', nameUz: 'Yer', nameRu: 'Участок', icon: 'land', floorCapable: false, buildingTypeCapable: false, repairTypeCapable: false },
+  { slug: 'NON_RESIDENTIAL', nameUz: 'Noturar joy', nameRu: 'Нежилое помещение', icon: 'shop', floorCapable: true, buildingTypeCapable: true, repairTypeCapable: true },
+  { slug: 'BUILDING', nameUz: 'Bino', nameRu: 'Здание', icon: 'building', floorCapable: true, buildingTypeCapable: true, repairTypeCapable: true },
+  { slug: 'DACHA', nameUz: 'Dacha', nameRu: 'Дача', icon: 'dacha', floorCapable: false, buildingTypeCapable: true, repairTypeCapable: true },
+  { slug: 'HOTEL', nameUz: 'Mehmonxona', nameRu: 'Гостиница', icon: 'hotel', floorCapable: true, buildingTypeCapable: true, repairTypeCapable: true },
 ];
