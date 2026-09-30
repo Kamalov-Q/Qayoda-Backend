@@ -27,6 +27,9 @@ import {
   ],
   controllers: [SupportController, AdminSupportController],
   providers: [SupportService, SupportGateway],
-  exports: [SupportService],
+  // The gateway too: a module that sends on somebody's behalf — a rejected
+  // verification, say — has to push the message as well as store it, exactly
+  // as AdminSupportController does.
+  exports: [SupportService, SupportGateway],
 })
 export class SupportModule {}

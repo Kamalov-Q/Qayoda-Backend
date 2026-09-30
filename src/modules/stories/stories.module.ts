@@ -2,10 +2,14 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
 import { Story, StoryReaction, StoryView } from './story.entity';
+import { StoryReport } from './story-report.entity';
 import { Listing } from '../listings/entities/listing.entity';
 import { User } from '../users/entities/user.entity';
 import { StoriesService } from './stories.service';
-import { StoriesController } from './stories.controller';
+import {
+  AdminStoryReportsController,
+  StoriesController,
+} from './stories.controller';
 
 /**
  * Stories: public, short-lived posts on the Home screen.
@@ -16,10 +20,17 @@ import { StoriesController } from './stories.controller';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Story, StoryView, StoryReaction, Listing, User]),
+    TypeOrmModule.forFeature([
+      Story,
+      StoryView,
+      StoryReaction,
+      StoryReport,
+      Listing,
+      User,
+    ]),
     AuthModule,
   ],
-  controllers: [StoriesController],
+  controllers: [StoriesController, AdminStoryReportsController],
   providers: [StoriesService],
   exports: [StoriesService],
 })

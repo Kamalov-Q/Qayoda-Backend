@@ -17,6 +17,7 @@ import { CategoriesModule } from './modules/categories/categories.module';
 import { AmenitiesModule } from './modules/amenities/amenities.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { StoriesModule } from './modules/stories/stories.module';
+import { VerificationModule } from './modules/verification/verification.module';
 import { LiveModule } from './modules/live/live.module';
 import { RatingModule } from './modules/rating/rating.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
@@ -42,6 +43,7 @@ import { BlocksModule } from './modules/blocks/blocks.module';
     AmenitiesModule,
     ReportsModule,
     StoriesModule,
+    VerificationModule,
     LiveModule,
     RatingModule,
     ReviewsModule,

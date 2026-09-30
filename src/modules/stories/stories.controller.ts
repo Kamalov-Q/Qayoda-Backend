@@ -6,12 +6,14 @@ import {
   HttpCode,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
 import {
+  ApiBearerAuth,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOperation,
@@ -24,10 +26,14 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthUser } from '../auth/types/auth-user.type';
 import { ErrorResponse } from 'src/shared/responses/error.response';
 import { UserRole } from 'src/shared/enums';
+import { Roles, RolesGuard } from 'src/shared/guards/roles.guard';
 import { StoriesService } from './stories.service';
 import {
+  AdminStoryReportsQueryDto,
+  AdminStoryReportStatusDto,
   CreateStoryDto,
   ReactToStoryDto,
+  ReportStoryDto,
   StoryViewersQueryDto,
 } from './dto/story.dto';
 
@@ -140,6 +146,22 @@ export class StoriesController {
     return this.stories.viewers(id, user.sub, query);
   }
 
+  @ApiOperation({
+    summary: 'Report a story',
+    description:
+      'One report per person per story. What the story contained is copied onto the report, because a story expires — often before a moderator has looked — and a complaint about something nobody can see any more is not actionable.',
+  })
+  @UseGuards(JwtAccessGuard, PhoneRequiredGuard)
+  @Post(':id/report')
+  @HttpCode(200)
+  report(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ReportStoryDto,
+  ) {
+    return this.stories.report(id, user.sub, dto);
+  }
+
   @ApiOperation({ summary: 'Take a story down' })
   @ApiForbiddenResponse({ type: ErrorResponse })
   @UseGuards(JwtAccessGuard)
@@ -149,5 +171,46 @@ export class StoriesController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.stories.remove(id, user.sub, user.role === UserRole.ADMIN);
+  }
+}
+
+/**
+ * The moderators' side of stories. A reported story outlives the story
+ * itself — see StoryReport — so this queue keeps working after the thing it
+ * is about has expired.
+ */
+@ApiTags('Admin')
+@ApiBearerAuth()
+@Controller('admin/story-reports')
+@UseGuards(JwtAccessGuard, RolesGuard)
+@Roles(UserRole.ADMIN)
+export class AdminStoryReportsController {
+  constructor(private readonly stories: StoriesService) {}
+
+  @ApiOperation({ summary: 'Reported stories' })
+  @Get()
+  list(@Query() query: AdminStoryReportsQueryDto) {
+    return this.stories.adminReports(query);
+  }
+
+  @ApiOperation({ summary: 'Triage a reported story' })
+  @Patch(':id/status')
+  setStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AdminStoryReportStatusDto,
+  ) {
+    return this.stories.setReportStatus(id, dto.status);
+  }
+
+  @ApiOperation({
+    summary: 'Take a reported story down',
+    description: 'The report stays in the queue; only the story goes.',
+  })
+  @Delete(':storyId/story')
+  removeStory(
+    @CurrentUser() user: AuthUser,
+    @Param('storyId', ParseUUIDPipe) storyId: string,
+  ) {
+    return this.stories.remove(storyId, user.sub, true);
   }
 }

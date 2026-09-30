@@ -207,4 +207,37 @@ export class MediaController {
     }
     return this.mediaService.processChatAttachment(file, kind);
   }
+
+  @ApiOperation({
+    summary: 'Upload an identity document',
+    description: [
+      `One image (up to ${MAX_FILE_SIZE / 1024 / 1024}MB) for a verification application: a passport page, or the applicant holding it.`,
+      '',
+      'Stored under its own prefix, re-encoded so the camera\'s metadata does not travel with it, and deleted as soon as a moderator decides the application.',
+      '',
+      'Rate limit: 10 requests per minute — three files is a whole application.',
+    ].join('\n'),
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: { file: { type: 'string', format: 'binary' } },
+    },
+  })
+  @ApiBadRequestResponse({
+    type: ErrorResponse,
+    description: 'No file was sent, or it is not an image.',
+  })
+  @UseGuards(JwtAccessGuard)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('verification/upload')
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: MAX_FILE_SIZE } }),
+  )
+  uploadDocument(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('Upload a file');
+    return this.mediaService.processDocument(file.buffer);
+  }
 }

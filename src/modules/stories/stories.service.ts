@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -7,13 +8,16 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, LessThan, MoreThan, Repository } from 'typeorm';
 import { Story, StoryReaction, StoryView } from './story.entity';
+import { StoryReport } from './story-report.entity';
 import { Listing } from '../listings/entities/listing.entity';
 import { ListingStatus } from '../listings/enums/listing-status.enum';
 import { User } from '../users/entities/user.entity';
 import { BlocksService } from '../blocks/blocks.service';
 import {
+  AdminStoryReportsQueryDto,
   CreateStoryDto,
   ReactToStoryDto,
+  ReportStoryDto,
   StoryViewersQueryDto,
 } from './dto/story.dto';
 
@@ -35,6 +39,15 @@ export interface AuthorCard {
   isVerifiedRealtor: boolean;
 }
 
+/** A person as the dashboard's report queue shows them. */
+export interface ModerationPerson {
+  id: string;
+  name: string | null;
+  surname: string | null;
+  phoneNumber: string | null;
+  avatarThumbUrl: string | null;
+}
+
 @Injectable()
 export class StoriesService {
   constructor(
@@ -42,6 +55,8 @@ export class StoriesService {
     @InjectRepository(StoryView) private readonly views: Repository<StoryView>,
     @InjectRepository(StoryReaction)
     private readonly reactions: Repository<StoryReaction>,
+    @InjectRepository(StoryReport)
+    private readonly reports: Repository<StoryReport>,
     @InjectRepository(Listing) private readonly listings: Repository<Listing>,
     @InjectRepository(User) private readonly users: Repository<User>,
     private readonly blocks: BlocksService,
@@ -239,6 +254,8 @@ export class StoriesService {
       await m.delete(StoryView, { storyId });
       await m.delete(StoryReaction, { storyId });
       await m.delete(Story, { id: storyId });
+      // Reports are NOT deleted with it: a moderator's queue that empties
+      // itself when the accused takes the story down is not a queue.
     });
 
     return { success: true };
@@ -356,6 +373,117 @@ export class StoriesService {
     };
   }
 
+  /**
+   * Flags a story for the moderators.
+   *
+   * The story's contents are copied onto the report, because a story expires
+   * — often within hours, sometimes before anybody has looked at the queue —
+   * and "story 3f2c was offensive" is a complaint nobody can act on.
+   */
+  async report(storyId: string, reporterId: string, dto: ReportStoryDto) {
+    const story = await this.mustExist(storyId);
+
+    if (story.authorId === reporterId) {
+      throw new ForbiddenException({
+        code: 'OWN_STORY',
+        message: 'You cannot report your own story',
+      });
+    }
+    if (dto.reason === 'OTHER' && !dto.comment?.trim()) {
+      throw new BadRequestException({
+        code: 'COMMENT_REQUIRED',
+        message: 'A comment is required when the reason is OTHER',
+      });
+    }
+
+    const existing = await this.reports.findOneBy({ storyId, reporterId });
+    if (existing) {
+      throw new ConflictException({
+        code: 'ALREADY_REPORTED',
+        message: 'You have already reported this story',
+      });
+    }
+
+    await this.reports.save(
+      this.reports.create({
+        storyId,
+        reporterId,
+        authorId: story.authorId,
+        reason: dto.reason,
+        comment: dto.comment?.trim() || null,
+        storyType: story.type,
+        storyMediaUrl: story.mediaUrl,
+        storyThumbUrl: story.thumbUrl,
+        storyBody: story.body,
+      }),
+    );
+
+    return { success: true };
+  }
+
+  /** The moderators' queue. Newest first, open ones by default. */
+  async adminReports(q: AdminStoryReportsQueryDto) {
+    const [rows, total] = await this.reports.findAndCount({
+      where: q.status ? { status: q.status } : {},
+      order: { createdAt: 'DESC' },
+      take: q.limit ?? 20,
+      skip: q.offset ?? 0,
+    });
+
+    // Its own lookup rather than authorMap: a moderator needs the phone
+    // number to act on a report, and authorMap feeds the public tray.
+    const people = await this.moderationPeople([
+      ...rows.map((r) => r.reporterId),
+      ...rows.map((r) => r.authorId),
+    ]);
+
+    // Whether the story is still up decides what a moderator can do about it,
+    // so it is answered here rather than left as a 404 they have to discover.
+    const live = new Set(
+      (
+        await this.stories.find({
+          where: { id: In(rows.map((r) => r.storyId)) },
+          select: { id: true, expiresAt: true },
+        })
+      )
+        .filter((st) => st.expiresAt.getTime() > Date.now())
+        .map((st) => st.id),
+    );
+
+    return {
+      total,
+      items: rows.map((r) => ({
+        id: r.id,
+        storyId: r.storyId,
+        reason: r.reason,
+        comment: r.comment,
+        status: r.status,
+        createdAt: r.createdAt,
+        stillLive: live.has(r.storyId),
+        story: {
+          type: r.storyType,
+          mediaUrl: r.storyMediaUrl,
+          thumbUrl: r.storyThumbUrl,
+          body: r.storyBody,
+        },
+        author: people.get(r.authorId) ?? null,
+        reporter: people.get(r.reporterId) ?? null,
+      })),
+    };
+  }
+
+  async setReportStatus(id: string, status: 'OPEN' | 'RESOLVED' | 'DISMISSED') {
+    const report = await this.reports.findOneBy({ id });
+    if (!report) throw new NotFoundException({ code: 'REPORT_NOT_FOUND' });
+    await this.reports.update(id, { status });
+    return { ...report, status };
+  }
+
+  /** The overview's "needs attention" number. */
+  openReportCount() {
+    return this.reports.countBy({ status: 'OPEN' });
+  }
+
   /** Housekeeping for whoever wants to run it — expired rows and their
    *  children. Nothing depends on it: every read filters on `expires_at`. */
   async purgeExpired() {
@@ -422,6 +550,26 @@ export class StoriesService {
       },
     });
     return new Map(rows.map((u) => [u.id, u as AuthorCard]));
+  }
+
+  /** Who a report is about and who sent it, with enough to contact them. */
+  private async moderationPeople(
+    ids: string[],
+  ): Promise<Map<string, ModerationPerson>> {
+    const unique = [...new Set(ids)];
+    if (!unique.length) return new Map();
+
+    const rows = await this.users.find({
+      where: { id: In(unique) },
+      select: {
+        id: true,
+        name: true,
+        surname: true,
+        phoneNumber: true,
+        avatarThumbUrl: true,
+      },
+    });
+    return new Map(rows.map((u) => [u.id, u as ModerationPerson]));
   }
 
   private async seenSet(

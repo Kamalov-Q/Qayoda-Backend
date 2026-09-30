@@ -12,6 +12,10 @@ import {
   Min,
 } from 'class-validator';
 import { STORY_HOURS, STORY_TYPES, type StoryType } from '../story.entity';
+import {
+  STORY_REPORT_REASONS,
+  type StoryReportReason,
+} from '../../reports/reports.constants';
 
 /** Long enough for a paragraph over a photo, short enough to stay a story. */
 export const STORY_BODY_MAX = 600;
@@ -117,6 +121,49 @@ export class ReactToStoryDto {
   @IsString()
   @MaxLength(16)
   emoji: string;
+}
+
+export class ReportStoryDto {
+  @ApiProperty({
+    enum: STORY_REPORT_REASONS,
+    description: 'Why. OTHER requires `comment`.',
+  })
+  @IsEnum(STORY_REPORT_REASONS)
+  reason: StoryReportReason;
+
+  @ApiPropertyOptional({ maxLength: 500 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  comment?: string;
+}
+
+export class AdminStoryReportsQueryDto {
+  @ApiPropertyOptional({ enum: ['OPEN', 'RESOLVED', 'DISMISSED'] })
+  @IsOptional()
+  @IsIn(['OPEN', 'RESOLVED', 'DISMISSED'])
+  status?: 'OPEN' | 'RESOLVED' | 'DISMISSED';
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 100, default: 20 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+
+  @ApiPropertyOptional({ minimum: 0, default: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  offset?: number;
+}
+
+export class AdminStoryReportStatusDto {
+  @ApiProperty({ enum: ['OPEN', 'RESOLVED', 'DISMISSED'] })
+  @IsIn(['OPEN', 'RESOLVED', 'DISMISSED'])
+  status: 'OPEN' | 'RESOLVED' | 'DISMISSED';
 }
 
 export class StoryViewersQueryDto {

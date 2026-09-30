@@ -165,6 +165,46 @@ export class MediaService {
     };
   }
 
+  /**
+   * An identity document, for the verification queue.
+   *
+   * Its own prefix, and no thumbnail: a passport has no business in the
+   * folder the app serves listing photos from, and a second copy of it is a
+   * second thing to delete. Bigger than an avatar because the moderator has
+   * to read the small print on it, and re-encoded rather than stored as sent
+   * so that whatever the camera app wrapped around the pixels — EXIF, GPS,
+   * the device name — does not travel with it.
+   *
+   * The URL is unguessable but public, so these files are deleted as soon as
+   * a moderator decides. See VerificationService.purgeDocuments.
+   */
+  async processDocument(buffer: Buffer): Promise<{ url: string }> {
+    let meta: sharp.Metadata;
+
+    try {
+      meta = await sharp(buffer).metadata();
+    } catch {
+      throw new BadRequestException('Uploaded file is not an image');
+    }
+
+    if (!meta.width || !meta.height) {
+      throw new BadRequestException('Unable to determine image dimensions');
+    }
+
+    const id = crypto.randomUUID();
+    const storagePath = `kyc/${new Date().toISOString().slice(0, 7)}/${id}.jpg`;
+
+    const full = await sharp(buffer)
+      .rotate()
+      .resize(2000, 2000, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 88 })
+      .toBuffer();
+
+    await this.putToBunny(storagePath, full);
+
+    return { url: `${this.cdnUrl}/${storagePath}` };
+  }
+
   async deleteFromBunny(cdnUrl: string): Promise<void> {
     const storagePath = cdnUrl.replace(`${this.cdnUrl}/`, '');
     if (!storagePath || storagePath === cdnUrl) return;

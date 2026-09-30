@@ -14,6 +14,8 @@ import { UpdateListingDto } from '../listings/dto/update-listing.dto';
 import { TokenService } from '../auth/services/token.service';
 import { ReportsService } from '../reports/reports.service';
 import { ChatReportsService } from '../reports/chat-reports.service';
+import { StoriesService } from '../stories/stories.service';
+import { VerificationService } from '../verification/verification.service';
 import { RatesService } from '../../shared/rates/rates.service';
 import { EskizService } from '../notifications/eskiz.service';
 import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
@@ -42,6 +44,8 @@ export class AdminService {
     private readonly tokens: TokenService,
     private readonly reportsService: ReportsService,
     private readonly chatReportsService: ChatReportsService,
+    private readonly storiesService: StoriesService,
+    private readonly verificationService: VerificationService,
     private readonly rates: RatesService,
     private readonly eskiz: EskizService,
   ) {}
@@ -91,6 +95,8 @@ export class AdminService {
       listingsByCategory,
       openReports,
       openChatReports,
+      openStoryReports,
+      pendingVerifications,
     ] = await Promise.all([
       this.users.count(),
       this.users.count({ where: { role: UserRole.ADMIN } }),
@@ -105,6 +111,8 @@ export class AdminService {
       this.countByCategory(),
       this.reportsService.openCount(),
       this.chatReportsService.openCount(),
+      this.storiesService.openReportCount(),
+      this.verificationService.pendingCount(),
     ]);
 
     return {
@@ -118,6 +126,8 @@ export class AdminService {
       },
       reports: { open: openReports },
       chatReports: { open: openChatReports },
+      storyReports: { open: openStoryReports },
+      verification: { pending: pendingVerifications },
     };
   }
 

@@ -41,3 +41,27 @@ export const CHAT_REPORT_REASONS = [
   'OTHER',
 ] as const;
 export type ChatReportReason = (typeof CHAT_REPORT_REASONS)[number];
+
+/**
+ * Why a story can be reported.
+ *
+ * The chat list, near enough — a story is judged the same way a message is,
+ * by what somebody chose to put in front of other people — plus copyright,
+ * which is the one complaint that belongs to a medium people repost from
+ * elsewhere.
+ */
+export const STORY_REPORT_REASONS = [
+  /** Unsolicited advertising, repeated spam. */
+  'SPAM',
+  /** Scam attempt: fake offers, phishing. */
+  'SCAM',
+  /** Offensive or explicit content. */
+  'INAPPROPRIATE',
+  /** Insults, threats, harassment of a particular person. */
+  'HARASSMENT',
+  /** Somebody else's work, posted without them. */
+  'COPYRIGHT',
+  /** Anything else — requires the free-text comment. */
+  'OTHER',
+] as const;
+export type StoryReportReason = (typeof STORY_REPORT_REASONS)[number];
