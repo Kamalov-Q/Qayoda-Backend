@@ -310,9 +310,16 @@ export class StoriesService {
   }
 
   /**
-   * Who watched it, newest first — the poster's list, and nobody else's.
-   * Carries each viewer's reaction, which is what makes the list worth
-   * opening rather than a number.
+   * Who watched it — the poster's list, and nobody else's.
+   *
+   * People who reacted come first, then everyone else by when they watched.
+   * That is Telegram's order and it is the right one: a poster scrolling this
+   * list is looking for who said something, and burying a reaction thirty
+   * names down by the accident of when they opened it wastes the one part of
+   * the list that carries an opinion.
+   *
+   * Sorted in SQL rather than over the fetched page, or the first page would
+   * be sorted and the second would not.
    */
   async viewers(storyId: string, userId: string, q: StoryViewersQueryDto) {
     const story = await this.mustExist(storyId);
@@ -320,27 +327,31 @@ export class StoriesService {
       throw new ForbiddenException({ code: 'NOT_YOURS' });
     }
 
-    const [rows, total] = await this.views.findAndCount({
-      where: { storyId },
-      order: { createdAt: 'DESC' },
-      take: q.limit ?? 50,
-      skip: q.offset ?? 0,
-    });
+    const limit = q.limit ?? 50;
+    const offset = q.offset ?? 0;
 
-    const [people, reacted] = await Promise.all([
-      this.authorMap(rows.map((r) => r.viewerId)),
-      this.reactions.find({
-        where: { storyId, userId: In(rows.map((r) => r.viewerId)) },
-      }),
-    ]);
-    const emojiBy = new Map(reacted.map((r) => [r.userId, r.emoji]));
+    const rows = await this.dataSource.query<
+      { viewer_id: string; created_at: Date; emoji: string | null }[]
+    >(
+      `SELECT v.viewer_id, v.created_at, r.emoji
+         FROM story_views v
+         LEFT JOIN story_reactions r
+           ON r.story_id = v.story_id AND r.user_id = v.viewer_id
+        WHERE v.story_id = $1
+        ORDER BY (r.emoji IS NOT NULL) DESC, v.created_at DESC
+        LIMIT $2 OFFSET $3`,
+      [storyId, limit, offset],
+    );
+
+    const total = await this.views.countBy({ storyId });
+    const people = await this.authorMap(rows.map((r) => r.viewer_id));
 
     return {
       total,
       items: rows.map((row) => ({
-        viewer: people.get(row.viewerId) ?? null,
-        reaction: emojiBy.get(row.viewerId) ?? null,
-        seenAt: row.createdAt,
+        viewer: people.get(row.viewer_id) ?? null,
+        reaction: row.emoji,
+        seenAt: row.created_at,
       })),
     };
   }
