@@ -250,8 +250,17 @@ export class StoriesService {
   }
 
   /** The poster, or an admin clearing something up. */
+  /**
+   * Takes a story down.
+   *
+   * Not gated on it still being live: your own expired stories sit in the
+   * archive on your profile, and "delete" is exactly what somebody looking
+   * at an old one wants — while a moderator may need to remove one that ran
+   * out between the report and the review.
+   */
   async remove(storyId: string, userId: string, isAdmin: boolean) {
-    const story = await this.mustExist(storyId);
+    const story = await this.stories.findOneBy({ id: storyId });
+    if (!story) throw new NotFoundException({ code: 'STORY_NOT_FOUND' });
     if (story.authorId !== userId && !isAdmin) {
       throw new ForbiddenException({ code: 'NOT_YOURS' });
     }
@@ -403,7 +412,7 @@ export class StoriesService {
    * put anyone's name on anything.
    */
   async forward(storyId: string, senderId: string, conversationId: string) {
-    const story = await this.mustExist(storyId);
+    const story = await this.mustReach(storyId, senderId);
     const author = (await this.authorMap([story.authorId])).get(story.authorId);
     const name =
       [author?.name, author?.surname].filter(Boolean).join(' ') || null;
@@ -559,6 +568,23 @@ export class StoriesService {
   }
 
   // ------------------------------------------------------------- internals
+
+  /**
+   * A story the caller can actually see: anything still up, plus their own
+   * that has run out. The archive on a profile is the second case, and
+   * passing an old story of your own into a chat is a thing to allow — the
+   * media is yours either way.
+   */
+  private async mustReach(storyId: string, userId: string): Promise<Story> {
+    const story = await this.stories.findOneBy({ id: storyId });
+    if (
+      !story ||
+      (story.expiresAt.getTime() <= Date.now() && story.authorId !== userId)
+    ) {
+      throw new NotFoundException({ code: 'STORY_NOT_FOUND' });
+    }
+    return story;
+  }
 
   private async mustExist(storyId: string): Promise<Story> {
     const story = await this.stories.findOneBy({ id: storyId });
