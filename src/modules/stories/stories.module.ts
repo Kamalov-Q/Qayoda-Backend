@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
+import { ChatModule } from '../chat/chat.module';
 import { Story, StoryReaction, StoryView } from './story.entity';
 import { StoryReport } from './story-report.entity';
 import { Listing } from '../listings/entities/listing.entity';
@@ -29,6 +30,9 @@ import {
       User,
     ]),
     AuthModule,
+    // Forwarding a story is sending a chat message; the permission check and
+    // the attribution both belong to the module that owns messages.
+    ChatModule,
   ],
   controllers: [StoriesController, AdminStoryReportsController],
   providers: [StoriesService],

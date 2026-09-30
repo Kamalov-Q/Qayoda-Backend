@@ -32,6 +32,7 @@ import {
   AdminStoryReportsQueryDto,
   AdminStoryReportStatusDto,
   CreateStoryDto,
+  ForwardStoryDto,
   ReactToStoryDto,
   ReportStoryDto,
   StoryViewersQueryDto,
@@ -160,6 +161,24 @@ export class StoriesController {
     @Body() dto: ReportStoryDto,
   ) {
     return this.stories.report(id, user.sub, dto);
+  }
+
+  @ApiOperation({
+    summary: 'Pass a story into a chat',
+    description:
+      'Sends the story as a message in a conversation the caller is part ' +
+      'of, attributed to whoever posted the story — the same provenance a ' +
+      'forwarded chat message carries.',
+  })
+  @UseGuards(JwtAccessGuard, PhoneRequiredGuard)
+  @Post(':id/forward')
+  @HttpCode(200)
+  forward(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ForwardStoryDto,
+  ) {
+    return this.stories.forward(id, user.sub, dto.conversationId);
   }
 
   @ApiOperation({ summary: 'Take a story down' })

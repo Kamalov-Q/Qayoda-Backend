@@ -123,6 +123,16 @@ export class ReactToStoryDto {
   emoji: string;
 }
 
+export class ForwardStoryDto {
+  @ApiProperty({
+    description:
+      'A conversation the sender is already in. The story arrives as a ' +
+      'message attributed to whoever posted it.',
+  })
+  @IsUUID()
+  conversationId: string;
+}
+
 export class ReportStoryDto {
   @ApiProperty({
     enum: STORY_REPORT_REASONS,

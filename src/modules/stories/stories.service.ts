@@ -13,6 +13,9 @@ import { Listing } from '../listings/entities/listing.entity';
 import { ListingStatus } from '../listings/enums/listing-status.enum';
 import { User } from '../users/entities/user.entity';
 import { BlocksService } from '../blocks/blocks.service';
+import { ChatService } from '../chat/chat.service';
+import { SendMessageDto } from '../chat/dto/send-message.dto';
+import { MessageType } from '../chat/enums/message-type.enum';
 import {
   AdminStoryReportsQueryDto,
   CreateStoryDto,
@@ -60,6 +63,9 @@ export class StoriesService {
     @InjectRepository(Listing) private readonly listings: Repository<Listing>,
     @InjectRepository(User) private readonly users: Repository<User>,
     private readonly blocks: BlocksService,
+    // For forwarding a story into a chat, which is a chat message with the
+    // story's author snapshotted onto it.
+    private readonly chat: ChatService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -338,8 +344,18 @@ export class StoriesService {
    * Sorted in SQL rather than over the fetched page, or the first page would
    * be sorted and the second would not.
    */
+  /**
+   * Who watched it.
+   *
+   * Deliberately NOT gated on the story still being live. An expired story
+   * is gone for everybody else — that is what `mustExist` is for everywhere
+   * else in this file — but "who saw the thing I posted yesterday" is a
+   * question its author asks precisely after it has run out, and the archive
+   * on their profile exists to let them. Only the author check applies here.
+   */
   async viewers(storyId: string, userId: string, q: StoryViewersQueryDto) {
-    const story = await this.mustExist(storyId);
+    const story = await this.stories.findOneBy({ id: storyId });
+    if (!story) throw new NotFoundException({ code: 'STORY_NOT_FOUND' });
     if (story.authorId !== userId) {
       throw new ForbiddenException({ code: 'NOT_YOURS' });
     }
@@ -371,6 +387,46 @@ export class StoriesService {
         seenAt: row.created_at,
       })),
     };
+  }
+
+  /**
+   * Passes a story into a chat.
+   *
+   * Not the chat's own forward, which copies a MESSAGE by id — a story is
+   * not a message and has no id in anybody's thread. What makes this a
+   * forward rather than a re-upload is the attribution: the story's author
+   * is snapshotted onto the new message, so the bubble says who posted it
+   * and links to them, exactly as a forwarded chat message does.
+   *
+   * Attribution is set here rather than accepted from the client for the
+   * reason ChatService.sendMessage gives: a client that could set it could
+   * put anyone's name on anything.
+   */
+  async forward(storyId: string, senderId: string, conversationId: string) {
+    const story = await this.mustExist(storyId);
+    const author = (await this.authorMap([story.authorId])).get(story.authorId);
+    const name =
+      [author?.name, author?.surname].filter(Boolean).join(' ') || null;
+
+    const payload: SendMessageDto = story.mediaUrl
+      ? {
+          type:
+            story.type === 'VIDEO' ? MessageType.VIDEO : MessageType.IMAGE,
+          mediaUrl: story.mediaUrl,
+          thumbUrl: story.thumbUrl ?? undefined,
+          width: story.width ?? undefined,
+          height: story.height ?? undefined,
+          durationSec: story.durationSec ?? undefined,
+          body: story.body ?? undefined,
+        }
+      : { type: MessageType.TEXT, body: story.body ?? '' };
+
+    // sendMessage does the rest of the checking: that the sender is in this
+    // conversation, and that neither party has blocked the other.
+    return this.chat.sendMessage(conversationId, senderId, payload, {
+      userId: story.authorId,
+      name,
+    });
   }
 
   /**
