@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, LessThan, MoreThan, Repository } from 'typeorm';
+import { WalletService } from '../billing/wallet.service';
 import { Story, StoryReaction, StoryView } from './story.entity';
 import { StoryReport } from './story-report.entity';
 import { Listing } from '../listings/entities/listing.entity';
@@ -62,6 +63,7 @@ export class StoriesService {
     private readonly reports: Repository<StoryReport>,
     @InjectRepository(Listing) private readonly listings: Repository<Listing>,
     @InjectRepository(User) private readonly users: Repository<User>,
+    private readonly wallet: WalletService,
     private readonly blocks: BlocksService,
     // For forwarding a story into a chat, which is a chat message with the
     // story's author snapshotted onto it.
@@ -230,21 +232,28 @@ export class StoriesService {
     }
 
     const hours = dto.hours ?? DEFAULT_HOURS;
-    const saved = await this.stories.save(
-      this.stories.create({
-        authorId,
-        type: dto.type,
-        mediaUrl: dto.mediaUrl ?? null,
-        thumbUrl: dto.thumbUrl ?? null,
-        width: dto.width ?? null,
-        height: dto.height ?? null,
-        durationSec: dto.durationSec ?? null,
-        body: dto.body?.trim() || null,
-        background: dto.background ?? 0,
-        listingId: dto.listingId ?? null,
-        expiresAt: new Date(Date.now() + hours * 3_600_000),
-      }),
-    );
+    // Pay-as-you-go: a story costs the STORY_POST tariff, debited in the same
+    // transaction that creates it — a failed insert refunds by rollback, and
+    // an empty wallet stops here with 402 INSUFFICIENT_FUNDS.
+    const saved = await this.dataSource.transaction(async (manager) => {
+      await this.wallet.charge(manager, authorId, 'STORY_POST');
+      const repo = manager.getRepository(Story);
+      return repo.save(
+        repo.create({
+          authorId,
+          type: dto.type,
+          mediaUrl: dto.mediaUrl ?? null,
+          thumbUrl: dto.thumbUrl ?? null,
+          width: dto.width ?? null,
+          height: dto.height ?? null,
+          durationSec: dto.durationSec ?? null,
+          body: dto.body?.trim() || null,
+          background: dto.background ?? 0,
+          listingId: dto.listingId ?? null,
+          expiresAt: new Date(Date.now() + hours * 3_600_000),
+        }),
+      );
+    });
 
     return this.get(saved.id, authorId);
   }

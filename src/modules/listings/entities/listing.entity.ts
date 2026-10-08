@@ -180,4 +180,8 @@ export class Listing {
   @UpdateDateColumn({ name: 'updated_at' }) updatedAt: Date;
   @Column({ name: 'published_at', type: 'timestamptz', nullable: true })
   publishedAt: Date | null;
+
+  /** Paid "TOP" placement: the feed ranks the listing first until this. */
+  @Column({ name: 'promoted_until', type: 'timestamptz', nullable: true })
+  promotedUntil: Date | null;
 }

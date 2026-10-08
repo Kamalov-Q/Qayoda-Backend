@@ -20,6 +20,7 @@ import { ProjectMapPointListener } from './listeners/project-map-point.listener'
 import { AuthModule } from '../auth/auth.module';
 import { CategoriesModule } from '../categories/categories.module';
 import { AmenitiesModule } from '../amenities/amenities.module';
+import { BillingModule } from '../billing/billing.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { AmenitiesModule } from '../amenities/amenities.module';
     AuthModule,
     CategoriesModule,
     AmenitiesModule,
+    BillingModule,
   ],
   controllers: [ListingsMapController, ListingsController],
   providers: [

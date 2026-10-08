@@ -49,6 +49,27 @@ export async function runPreSync(url: string, ssl: unknown): Promise<void> {
           ALTER TABLE listing_map_points
             ALTER COLUMN category TYPE varchar(40) USING category::text;
         END IF;
+
+        -- Billing columns that were widened after the first version shipped.
+        -- Left to synchronize these would be DROP + ADD NOT NULL, which fails
+        -- on a table with rows (and would erase them if it did not).
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'tariffs' AND column_name = 'name_uz'
+            AND character_maximum_length < 120
+        ) THEN
+          ALTER TABLE tariffs
+            ALTER COLUMN name_uz TYPE varchar(120),
+            ALTER COLUMN name_ru TYPE varchar(120);
+        END IF;
+
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'wallet_transactions' AND column_name = 'kind'
+            AND character_maximum_length < 32
+        ) THEN
+          ALTER TABLE wallet_transactions ALTER COLUMN kind TYPE varchar(32);
+        END IF;
       END $$;
 
       -- The enum types are unused once both columns are text.

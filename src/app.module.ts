@@ -15,6 +15,7 @@ import { UsersModule } from './modules/users/users.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { AmenitiesModule } from './modules/amenities/amenities.module';
+import { BillingModule } from './modules/billing/billing.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { StoriesModule } from './modules/stories/stories.module';
 import { VerificationModule } from './modules/verification/verification.module';
@@ -41,6 +42,7 @@ import { BlocksModule } from './modules/blocks/blocks.module';
     AdminModule,
     CategoriesModule,
     AmenitiesModule,
+    BillingModule,
     ReportsModule,
     StoriesModule,
     VerificationModule,

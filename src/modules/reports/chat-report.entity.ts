@@ -21,6 +21,9 @@ import type { ReportStatus } from './report.entity';
  */
 @Entity('chat_reports')
 @Unique('uq_chat_report_conversation_reporter', ['conversationId', 'reporterId'])
+// As in ListingReport: declared so the schema check stays a signal rather
+// than proposing to drop an index the rating recompute depends on.
+@Index('idx_chat_reports_status_conversation', ['status', 'conversationId'])
 export class ChatReport {
   @PrimaryGeneratedColumn('uuid') id: string;
 

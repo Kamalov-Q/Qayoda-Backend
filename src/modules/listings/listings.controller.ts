@@ -327,4 +327,20 @@ export class ListingsController {
   restore(@Req() req: ListingRequest) {
     return this.listingsService.restore(req.listing);
   }
+
+  @ApiOperation({
+    summary: 'Promote the listing to the top (paid)',
+    description:
+      'Charges the LISTING_PROMOTE tariff from the wallet and ranks the listing first in the default feed for the number of days set on that tariff (`durationDays` in GET /wallet); promoting again while live extends from the current end. 402 INSUFFICIENT_FUNDS when the balance does not cover it.',
+  })
+  @ApiParam(LISTING_ID_PARAM)
+  @ApiUnauthorizedResponse({ type: ErrorResponse })
+  @ApiForbiddenResponse(NOT_OWNER)
+  @ApiNotFoundResponse(NO_LISTING)
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAccessGuard, ListingOwnershipGuard)
+  @Post(':id/promote')
+  promote(@Req() req: ListingRequest) {
+    return this.listingsService.promote(req.listing);
+  }
 }

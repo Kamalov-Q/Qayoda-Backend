@@ -175,8 +175,9 @@ export class MediaService {
    * so that whatever the camera app wrapped around the pixels — EXIF, GPS,
    * the device name — does not travel with it.
    *
-   * The URL is unguessable but public, so these files are deleted as soon as
-   * a moderator decides. See VerificationService.purgeDocuments.
+   * The URL is unguessable but public, and these files are kept for the
+   * dashboard's record of the decision, so the prefix is worth keeping out
+   * of any bucket listing that gets shared around.
    */
   async processDocument(buffer: Buffer): Promise<{ url: string }> {
     let meta: sharp.Metadata;

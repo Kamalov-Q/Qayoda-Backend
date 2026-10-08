@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
+import { BillingModule } from '../billing/billing.module';
 import { ChatModule } from '../chat/chat.module';
 import { Story, StoryReaction, StoryView } from './story.entity';
 import { StoryReport } from './story-report.entity';
@@ -21,6 +22,7 @@ import {
  */
 @Module({
   imports: [
+    BillingModule,
     TypeOrmModule.forFeature([
       Story,
       StoryView,

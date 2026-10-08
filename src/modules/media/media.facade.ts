@@ -8,9 +8,4 @@ export class MediaFacade {
   processAvatar(buffer: Buffer): Promise<ProcessedAvatar> {
     return this.mediaService.processAvatar(buffer);
   }
-
-  /** Removes one uploaded file from storage, by the CDN URL it was given. */
-  deleteFile(cdnUrl: string): Promise<void> {
-    return this.mediaService.deleteFromBunny(cdnUrl);
-  }
 }

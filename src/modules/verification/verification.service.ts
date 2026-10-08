@@ -46,8 +46,8 @@ export class VerificationService {
    * Where the applicant stands: the badge itself, and their last attempt.
    *
    * The document URLs are deliberately not here. The applicant knows what
-   * they sent, and every extra place those links are handed out is another
-   * place they can leak from.
+   * they sent, and every place those links are handed out is another place
+   * they can leak from — the review queue needs them, this does not.
    */
   async mine(userId: string) {
     const user = await this.users.findOne({
@@ -156,7 +156,6 @@ export class VerificationService {
       reviewerId: adminId,
       reviewedAt: new Date(),
     });
-    await this.purgeDocuments(request);
 
     return { id, status: 'APPROVED' as const, userId: request.userId };
   }
@@ -179,7 +178,6 @@ export class VerificationService {
       reviewedAt: new Date(),
       rejectionReason: text,
     });
-    await this.purgeDocuments(request);
 
     // Created if they have never written in: the desk may open a thread, and
     // this is the desk opening one.
@@ -190,6 +188,58 @@ export class VerificationService {
     this.supportGateway.emitMessage(request.userId, message);
 
     return { id, status: 'REJECTED' as const, userId: request.userId };
+  }
+
+  /**
+   * Puts a decided application back in the queue.
+   *
+   * Moderators are people: one gets approved that should not have been, or
+   * turned down on a bad photograph that turns out to be fine. Without this
+   * the only way back is to ask the applicant to apply again, which punishes
+   * them for somebody else's mistake.
+   *
+   * Reopening an approved one takes the badge away with it — the account is
+   * no longer verified, it is back under review, and leaving the badge on
+   * would be saying otherwise. The documents do not come back: they were
+   * deleted at the decision and cannot be undeleted, so a reopened
+   * application is a request for fresh ones.
+   */
+  async reopen(id: string, adminId: string) {
+    const request = await this.requests.findOneBy({ id });
+    if (!request) throw new NotFoundException({ code: 'REQUEST_NOT_FOUND' });
+
+    if (request.status === 'PENDING') {
+      throw new BadRequestException({
+        code: 'ALREADY_PENDING',
+        message: 'This application is already in the queue',
+      });
+    }
+
+    // The partial unique index allows one PENDING per account; a newer
+    // application already waiting is the one the desk should be looking at.
+    const waiting = await this.requests.findOneBy({
+      userId: request.userId,
+      status: 'PENDING',
+    });
+    if (waiting) {
+      throw new BadRequestException({
+        code: 'REQUEST_PENDING',
+        message: 'A newer application from this account is already waiting',
+      });
+    }
+
+    if (request.status === 'APPROVED') {
+      await this.users.update(request.userId, { isVerifiedRealtor: false });
+    }
+
+    await this.requests.update(id, {
+      status: 'PENDING',
+      reviewerId: adminId,
+      reviewedAt: null,
+      rejectionReason: null,
+    });
+
+    return { id, status: 'PENDING' as const, userId: request.userId };
   }
 
   /** The overview's "needs attention" number. */
@@ -213,39 +263,6 @@ export class VerificationService {
       });
     }
     return request;
-  }
-
-  /**
-   * The documents go the moment the decision is made.
-   *
-   * Best effort by design: a storage hiccup must not undo a decision that is
-   * already recorded, so a failure here is logged and nothing more. The rows
-   * are cleared either way — a URL nobody can produce a file for is no use to
-   * anyone who gets hold of it.
-   */
-  private async purgeDocuments(request: VerificationRequest) {
-    const urls = [
-      request.passportFrontUrl,
-      request.passportBackUrl,
-      request.selfieUrl,
-    ].filter((u): u is string => !!u);
-
-    await this.requests.update(request.id, {
-      passportFrontUrl: null,
-      passportBackUrl: null,
-      selfieUrl: null,
-    });
-
-    const results = await Promise.allSettled(
-      urls.map((url) => this.media.deleteFile(url)),
-    );
-    for (const result of results) {
-      if (result.status === 'rejected') {
-        this.logger.warn(
-          `Verification document not deleted: ${String(result.reason)}`,
-        );
-      }
-    }
   }
 
   private async applicants(ids: string[]): Promise<Map<string, ApplicantCard>> {

@@ -1,9 +1,9 @@
 -- Applications for the verified badge.
 --
--- The three document columns are nullable on purpose: they hold a CDN URL
--- only while an application is waiting. The moment a moderator approves or
--- rejects one, the columns are cleared and the files are deleted from
--- storage — the decision is worth keeping, the passport photo is not.
+-- The three document columns hold CDN URLs and are kept after a decision, so
+-- the dashboard can show what an application was checked against months
+-- later. They are nullable because the first version of this cleared them on
+-- decision, and because a request to erase one has to be answerable.
 --
 -- The partial unique index is what stops one account having two applications
 -- in the queue, while leaving its earlier decided attempts alone.

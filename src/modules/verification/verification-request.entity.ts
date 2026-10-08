@@ -12,11 +12,12 @@ export type VerificationStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 /**
  * One application for the verified badge.
  *
- * The documents are the sensitive part and they do not live here forever: the
- * three URLs are cleared the moment a moderator decides, and the files behind
- * them are deleted from storage. What is kept is the decision — who made it,
- * when, and what the applicant was told — because that is what a second look
- * or a complaint needs, and a passport photo is not.
+ * The row keeps everything about the attempt — the three documents, the
+ * decision, who made it, when, and what the applicant was told — so the
+ * dashboard can show a decided application in full months later. That is a
+ * standing copy of somebody's passport: the columns are nullable because
+ * earlier applications were cleared on decision, and because a request to
+ * erase one has to be answerable.
  *
  * History is kept per attempt rather than overwritten: somebody rejected
  * twice for the same thing is a different case from a first-time applicant,
@@ -38,7 +39,7 @@ export class VerificationRequest {
   @Column({ type: 'varchar', length: 20, default: 'PENDING' })
   status: VerificationStatus;
 
-  /** Null after a decision — see the note on the class. */
+  /** Null only on applications decided before documents were retained. */
   @Column({ name: 'passport_front_url', type: 'text', nullable: true })
   passportFrontUrl: string | null;
 

@@ -70,9 +70,8 @@ export class VerificationController {
 /**
  * The moderators' queue.
  *
- * Deciding an application also disposes of its documents — see
- * VerificationService.purgeDocuments. A decision here is therefore the last
- * moment anybody can look at them, which is on purpose.
+ * Decided applications keep their documents, so this queue doubles as the
+ * record of who was checked against what.
  */
 @ApiTags('Admin')
 @ApiBearerAuth('access-token')
@@ -90,7 +89,7 @@ export class AdminVerificationController {
 
   @ApiOperation({
     summary: 'Give the badge',
-    description: 'Marks the account verified and deletes the documents.',
+    description: 'Marks the account verified. The documents stay on the\n      application for the dashboard\'s history.',
   })
   @Post(':id/approve')
   @HttpCode(200)
@@ -102,10 +101,25 @@ export class AdminVerificationController {
   }
 
   @ApiOperation({
+    summary: 'Put a decided one back in the queue',
+    description:
+      'Reopening an approved application also takes the badge back. The ' +
+      'documents stay as they were.',
+  })
+  @Post(':id/reopen')
+  @HttpCode(200)
+  reopen(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.verification.reopen(id, user.sub);
+  }
+
+  @ApiOperation({
     summary: 'Turn one down',
     description:
       'The reason is sent to the applicant as a support message, word for ' +
-      'word, and the documents are deleted.',
+      'word.',
   })
   @Post(':id/reject')
   @HttpCode(200)

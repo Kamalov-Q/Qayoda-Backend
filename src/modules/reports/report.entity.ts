@@ -17,6 +17,11 @@ export type ReportStatus = 'OPEN' | 'RESOLVED' | 'DISMISSED';
  */
 @Entity('listing_reports')
 @Unique('uq_report_listing_reporter', ['listingId', 'reporterId'])
+// Declared here as well as created by hand in sql/2026-09-29-rating.sql: an
+// index the entities do not know about is one `npm run schema:sql` offers to
+// DROP, which turns the schema check into something you learn to ignore.
+// The rating recompute reads upheld reports by listing through it.
+@Index('idx_listing_reports_status_listing', ['status', 'listingId'])
 export class ListingReport {
   @PrimaryGeneratedColumn('uuid') id: string;
 

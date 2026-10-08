@@ -23,6 +23,8 @@ import { UpdateImagesDto } from './dto/update-images.dto';
 import { ListingSaveRepository } from './repositories/listing-save.repository';
 import { CategoriesService } from '../categories/categories.service';
 import { AmenitiesService } from '../amenities/amenities.service';
+import { WalletService } from '../billing/wallet.service';
+import { PROMOTE_DAYS } from '../billing/billing.constants';
 import { RatesService } from 'src/shared/rates/rates.service';
 import { TtlCache } from 'src/shared/cache/ttl-cache';
 
@@ -46,6 +48,7 @@ export class ListingsService {
     private readonly dataSource: DataSource,
     private readonly categories: CategoriesService,
     private readonly amenities: AmenitiesService,
+    private readonly wallet: WalletService,
   ) {}
 
   /**
@@ -99,6 +102,12 @@ export class ListingsService {
       : null;
 
     const listingId = await this.dataSource.transaction(async (manager) => {
+      // Pay-as-you-go: publishing costs the LISTING_POST tariff, debited in
+      // THIS transaction — any failure below rolls the money back with the
+      // listing. Admins and an inactive tariff are free; an empty wallet
+      // stops here with 402 INSUFFICIENT_FUNDS before anything is written.
+      await this.wallet.charge(manager, ownerId, 'LISTING_POST');
+
       const listingRepo = manager.getRepository(Listing);
       const offerRepo = manager.getRepository(ListingOffer);
 
@@ -484,6 +493,46 @@ export class ListingsService {
 
     this.cache.clear();
     return this.findById(listing.id);
+  }
+
+  /**
+   * Paid "TOP" placement: charges the LISTING_PROMOTE tariff and pushes the
+   * listing to the head of the feed for the tariff's duration (admin-set). Re-promoting while a
+   * promotion is live EXTENDS from its current end — paying twice buys
+   * twice the days, not a reset.
+   */
+  async promote(listing: Listing) {
+    if (listing.status !== ListingStatus.ACTIVE) {
+      throw new BadRequestException({
+        code: 'LISTING_NOT_ACTIVE',
+        message: 'Only a live listing can be promoted',
+      });
+    }
+
+    const promotedUntil = await this.dataSource.transaction(async (manager) => {
+      await this.wallet.charge(
+        manager,
+        listing.ownerId,
+        'LISTING_PROMOTE',
+        listing.id,
+      );
+      // Extended in SQL from the row's CURRENT value, not the copy the guard
+      // loaded: two promotions at once must add up to fourteen days, not
+      // charge twice for the same seven.
+      const [rows]: [{ promoted_until: Date }[]] = await manager.query(
+        `UPDATE listings
+            SET promoted_until =
+                  GREATEST(COALESCE(promoted_until, now()), now())
+                  + make_interval(days => $2)
+          WHERE id = $1
+          RETURNING promoted_until`,
+        [listing.id, await this.wallet.durationDays(manager, 'LISTING_PROMOTE', PROMOTE_DAYS)],
+      );
+      return rows[0].promoted_until;
+    });
+
+    this.cache.clear();
+    return { id: listing.id, promotedUntil };
   }
 
   async archive(listing: Listing) {

@@ -98,7 +98,16 @@ export class ListingRepository extends Repository<Listing> {
     }
 
     if (q.sort === 'newest') {
-      ids.orderBy('l.published_at', 'DESC', 'NULLS LAST');
+      // Paid placement: live promotions lead the default feed. Explicit price
+      // sorts are left honest — a promoted listing must not pretend to be
+      // the cheapest.
+      ids
+        .addSelect(
+          `CASE WHEN l.promoted_until > now() THEN 1 ELSE 0 END`,
+          'is_promoted',
+        )
+        .orderBy('is_promoted', 'DESC')
+        .addOrderBy('l.published_at', 'DESC', 'NULLS LAST');
     } else {
       // The cheapest live offer of the purpose being browsed. A listing with
       // no comparable price sorts last either way — it is not cheap, its
