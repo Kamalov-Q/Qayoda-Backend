@@ -29,6 +29,7 @@ import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
 import { PhoneRequiredGuard } from '../auth/guards/phone-required.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { CreateListingDto } from './dto/create-listing.dto';
+import { PromoteListingDto } from './dto/promote-listing.dto';
 import { ListingOwnershipGuard } from './guards/listing-ownership.guard';
 import { UpdateOffersDto } from './dto/update-offers.dto';
 import { UpdateGeometryDto } from './dto/update-geometry.dto';
@@ -331,7 +332,7 @@ export class ListingsController {
   @ApiOperation({
     summary: 'Promote the listing to the top (paid)',
     description:
-      'Charges the LISTING_PROMOTE tariff from the wallet and ranks the listing first in the default feed for the number of days set on that tariff (`durationDays` in GET /wallet); promoting again while live extends from the current end. 402 INSUFFICIENT_FUNDS when the balance does not cover it.',
+      'Buys a TOP tariff (`tariffId`, from the LISTING_PROMOTE entries of GET /wallet) and ranks the listing first in the default feed for the `durationDays` of that tariff; promoting again while live extends from the current end. 402 INSUFFICIENT_FUNDS when the balance does not cover it.',
   })
   @ApiParam(LISTING_ID_PARAM)
   @ApiUnauthorizedResponse({ type: ErrorResponse })
@@ -340,7 +341,7 @@ export class ListingsController {
   @ApiBearerAuth('access-token')
   @UseGuards(JwtAccessGuard, ListingOwnershipGuard)
   @Post(':id/promote')
-  promote(@Req() req: ListingRequest) {
-    return this.listingsService.promote(req.listing);
+  promote(@Req() req: ListingRequest, @Body() dto: PromoteListingDto) {
+    return this.listingsService.promote(req.listing, dto.tariffId);
   }
 }

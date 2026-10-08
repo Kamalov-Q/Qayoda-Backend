@@ -24,7 +24,6 @@ import { ListingSaveRepository } from './repositories/listing-save.repository';
 import { CategoriesService } from '../categories/categories.service';
 import { AmenitiesService } from '../amenities/amenities.service';
 import { WalletService } from '../billing/wallet.service';
-import { PROMOTE_DAYS } from '../billing/billing.constants';
 import { RatesService } from 'src/shared/rates/rates.service';
 import { TtlCache } from 'src/shared/cache/ttl-cache';
 
@@ -501,7 +500,7 @@ export class ListingsService {
    * promotion is live EXTENDS from its current end — paying twice buys
    * twice the days, not a reset.
    */
-  async promote(listing: Listing) {
+  async promote(listing: Listing, tariffId?: string) {
     if (listing.status !== ListingStatus.ACTIVE) {
       throw new BadRequestException({
         code: 'LISTING_NOT_ACTIVE',
@@ -510,12 +509,14 @@ export class ListingsService {
     }
 
     const promotedUntil = await this.dataSource.transaction(async (manager) => {
-      await this.wallet.charge(
+      // Which TOP package is being bought: the one named, or the only one
+      // on sale. Its price is charged and its days are what the buyer gets.
+      const tariff = await this.wallet.resolveTimedTariff(
         manager,
-        listing.ownerId,
         'LISTING_PROMOTE',
-        listing.id,
+        tariffId,
       );
+      await this.wallet.chargeTariff(manager, listing.ownerId, tariff, listing.id);
       // Extended in SQL from the row's CURRENT value, not the copy the guard
       // loaded: two promotions at once must add up to fourteen days, not
       // charge twice for the same seven.
@@ -526,7 +527,7 @@ export class ListingsService {
                   + make_interval(days => $2)
           WHERE id = $1
           RETURNING promoted_until`,
-        [listing.id, await this.wallet.durationDays(manager, 'LISTING_PROMOTE', PROMOTE_DAYS)],
+        [listing.id, tariff.durationDays],
       );
       return rows[0].promoted_until;
     });

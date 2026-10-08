@@ -7,7 +7,7 @@ import { Roles, RolesGuard } from '../../shared/guards/roles.guard';
 import { UserRole } from '../../shared/enums';
 import { BillingAdminService } from './billing-admin.service';
 import {
-    AdjustWalletDto, AdminPaymentsQueryDto, CreateBonusTierDto, PageQueryDto, PatchBonusTierDto, PatchTariffDto,
+    AdjustWalletDto, AdminPaymentsQueryDto, CreateBonusTierDto, CreateTariffDto, PageQueryDto, PatchBonusTierDto, PatchTariffDto,
 } from './dto/billing.dto';
 
 @ApiTags('admin-billing')
@@ -21,8 +21,14 @@ export class BillingAdminController {
     @Get('tariffs')
     listTariffs() { return this.admin.listTariffs(); }
 
-    @Patch('tariffs/:key')
-    patchTariff(@Param('key') key: string, @Body() dto: PatchTariffDto) { return this.admin.patchTariff(key, dto); }
+    @Post('tariffs')
+    createTariff(@Body() dto: CreateTariffDto) { return this.admin.createTariff(dto); }
+
+    @Patch('tariffs/:id')
+    patchTariff(@Param('id', ParseUUIDPipe) id: string, @Body() dto: PatchTariffDto) { return this.admin.patchTariff(id, dto); }
+
+    @Delete('tariffs/:id')
+    deleteTariff(@Param('id', ParseUUIDPipe) id: string) { return this.admin.deleteTariff(id); }
 
     @Get('bonus-tiers')
     listBonusTiers() { return this.admin.listBonusTiers(); }

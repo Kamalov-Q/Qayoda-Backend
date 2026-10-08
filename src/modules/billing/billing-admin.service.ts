@@ -1,9 +1,9 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Not, Repository } from 'typeorm';
+import { DataSource, IsNull, Not, Repository } from 'typeorm';
 import { User } from '../users/entities/user.entity';
-import { PaymentProviderKind, PaymentStatus, TariffKey, TxKind, fromTiyin, toTiyin } from './billing.constants';
-import { AdjustWalletDto, CreateBonusTierDto, PatchBonusTierDto, PatchTariffDto } from './dto/billing.dto';
+import { PaymentProviderKind, PaymentStatus, TxKind, fromTiyin, isBuiltInAction, isTimedAction, toTiyin } from './billing.constants';
+import { AdjustWalletDto, CreateBonusTierDto, CreateTariffDto, PatchBonusTierDto, PatchTariffDto } from './dto/billing.dto';
 import { BonusTier } from './entities/bonus-tier.entity';
 import { Payment } from './entities/payment.entity';
 import { Tariff } from './entities/tariff.entity';
@@ -24,24 +24,75 @@ export class BillingAdminService {
     // ─── tariffs ──────────────────────────────────────────────────────────
 
     listTariffs() {
-        return this.tariffs.find({ order: { key: 'ASC' } });
+        return this.tariffs.find({ order: { action: 'ASC', durationDays: 'ASC', price: 'ASC' } });
     }
 
-    async patchTariff(key: string, dto: PatchTariffDto) {
-        const tariff = await this.tariffs.findOne({ where: { key: key as TariffKey } });
-        if (!tariff) throw new NotFoundException({ code: 'TARIFF_NOT_FOUND', message: `No tariff ${key}` });
+    async createTariff(dto: CreateTariffDto) {
+        const durationDays = this.durationFor(dto.action, dto.durationDays);
+        await this.assertTariffFree(dto.action, durationDays);
+        return this.tariffs.save(this.tariffs.create({
+            action: dto.action,
+            nameUz: dto.nameUz.trim(),
+            nameRu: dto.nameRu.trim(),
+            price: fromTiyin(toTiyin(dto.price)),
+            durationDays,
+            isActive: dto.isActive ?? true,
+        }));
+    }
+
+    async patchTariff(id: string, dto: PatchTariffDto) {
+        const tariff = await this.tariffs.findOne({ where: { id } });
+        if (!tariff) throw new NotFoundException({ code: 'TARIFF_NOT_FOUND', message: 'Tariff not found' });
         if (dto.nameUz !== undefined) tariff.nameUz = dto.nameUz.trim();
         if (dto.nameRu !== undefined) tariff.nameRu = dto.nameRu.trim();
         if (dto.price !== undefined) tariff.price = fromTiyin(toTiyin(dto.price));
-        if (dto.durationDays !== undefined) {
-            // A one-off action (posting a listing, a story) has nothing to last.
-            if (tariff.durationDays === null) {
-                throw new BadRequestException({ code: 'TARIFF_HAS_NO_DURATION', message: `${key} has no duration to set` });
-            }
-            tariff.durationDays = dto.durationDays;
-        }
         if (dto.isActive !== undefined) tariff.isActive = dto.isActive;
+        if (dto.durationDays !== undefined && dto.durationDays !== tariff.durationDays) {
+            const durationDays = this.durationFor(tariff.action, dto.durationDays);
+            await this.assertTariffFree(tariff.action, durationDays, id);
+            tariff.durationDays = durationDays;
+        }
         return this.tariffs.save(tariff);
+    }
+
+    async deleteTariff(id: string) {
+        const result = await this.tariffs.delete({ id });
+        if (!result.affected) throw new NotFoundException({ code: 'TARIFF_NOT_FOUND', message: 'Tariff not found' });
+        return { deleted: true };
+    }
+
+    /**
+     * The built-in actions have fixed shapes: TOP placement must say how long
+     * it lasts, and posting a listing or a story has nothing to last. A custom
+     * action may go either way.
+     */
+    private durationFor(action: string, durationDays: number | undefined): number | null {
+        if (isTimedAction(action) && durationDays === undefined) {
+            throw new BadRequestException({ code: 'DURATION_REQUIRED', message: `${action} needs durationDays` });
+        }
+        if (isBuiltInAction(action) && !isTimedAction(action) && durationDays !== undefined) {
+            throw new BadRequestException({ code: 'TARIFF_HAS_NO_DURATION', message: `${action} has no duration to set` });
+        }
+        return durationDays ?? null;
+    }
+
+    /** Per action: one tariff without a duration, one per duration otherwise. */
+    private async assertTariffFree(action: string, durationDays: number | null, exceptId?: string) {
+        const clash = await this.tariffs.findOne({
+            where: {
+                action,
+                durationDays: durationDays === null ? IsNull() : durationDays,
+                ...(exceptId ? { id: Not(exceptId) } : {}),
+            },
+        });
+        if (clash) {
+            throw new ConflictException({
+                code: 'TARIFF_EXISTS',
+                message: durationDays === null
+                    ? `${action} already has a tariff — edit it instead`
+                    : `${action} already has a ${durationDays}-day tariff`,
+            });
+        }
     }
 
     // ─── bonus tiers ──────────────────────────────────────────────────────

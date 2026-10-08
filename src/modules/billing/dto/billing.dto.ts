@@ -1,7 +1,7 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional, OmitType, PartialType } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsBoolean, IsEnum, IsInt, IsUUID, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min, NotEquals } from "class-validator";
-import { PaymentProviderKind, PaymentStatus, TOPUP_MAX, TOPUP_MIN } from "../billing.constants";
+import { IsBoolean, IsEnum, IsInt, Matches, IsUUID, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min, NotEquals } from "class-validator";
+import { PaymentProviderKind, PaymentStatus, TARIFF_ACTION_RE, TARIFF_ACTIONS, TOPUP_MAX, TOPUP_MIN } from "../billing.constants";
 
 export class TopupDto {
     @ApiProperty({ example: 2000, description: "so'm" })
@@ -56,22 +56,34 @@ export class AdminPaymentsQueryDto extends PageQueryDto {
 
 }
 
-export class PatchTariffDto {
-    @ApiPropertyOptional({ maxLength: 120 })
-    @IsOptional()
+export class CreateTariffDto {
+    @ApiProperty({
+        example: 'LISTING_PROMOTE',
+        description: `What this prices. ${TARIFF_ACTIONS.join(', ')} are charged by the server automatically; any other UPPER_SNAKE code is a custom tariff.`,
+    })
+    @Matches(TARIFF_ACTION_RE, { message: 'action must be UPPER_SNAKE_CASE, 2-40 characters' })
+    action: string;
+
+    @ApiProperty({ maxLength: 120 })
     @IsString()
     @IsNotEmpty()
     @MaxLength(120)
-    nameUz?: string;
+    nameUz: string;
 
-    @ApiPropertyOptional({ maxLength: 120 })
-    @IsOptional()
+    @ApiProperty({ maxLength: 120 })
     @IsString()
     @IsNotEmpty()
     @MaxLength(120)
-    nameRu?: string;
+    nameRu: string;
 
-    @ApiPropertyOptional({ example: 7, description: 'Days the paid effect lasts. Only for tariffs that have a duration.' })
+    @ApiProperty({ example: 5000, description: "so'm" })
+    @Type(() => Number)
+    @IsInt()
+    @Min(0)
+    @Max(TOPUP_MAX)
+    price: number;
+
+    @ApiPropertyOptional({ example: 7, description: 'Days the paid effect lasts. Required for LISTING_PROMOTE, refused for the built-in one-off actions, optional for custom ones.' })
     @IsOptional()
     @Type(() => Number)
     @IsInt()
@@ -79,20 +91,14 @@ export class PatchTariffDto {
     @Max(365)
     durationDays?: number;
 
-    @ApiPropertyOptional({ example: 2000, description: "so'm" })
-    @IsOptional()
-    @Type(() => Number)
-    @IsInt()
-    @Min(0)
-    @Max(TOPUP_MAX)
-    price?: number;
-
-    @ApiPropertyOptional()
+    @ApiPropertyOptional({ default: true })
     @IsOptional()
     @IsBoolean()
     isActive?: boolean;
-
 }
+
+/** Everything but the action: what a tariff prices cannot change after the fact. */
+export class PatchTariffDto extends PartialType(OmitType(CreateTariffDto, ['action'] as const)) { }
 
 export class CreateBonusTierDto {
     @ApiProperty({ example: 1000 })

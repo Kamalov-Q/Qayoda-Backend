@@ -72,6 +72,30 @@ export async function runPreSync(url: string, ssl: unknown): Promise<void> {
         END IF;
       END $$;
 
+      -- Tariffs: the fixed \`key\` primary key became an \`action\` column
+      -- behind a uuid id, so an admin can create and delete rows. Left to
+      -- synchronize this is DROP + ADD NOT NULL, which fails on existing rows.
+      DO $$
+      DECLARE pk text;
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'tariffs' AND column_name = 'key'
+        ) THEN
+          UPDATE tariffs SET duration_days = 7
+           WHERE key = 'LISTING_PROMOTE' AND duration_days IS NULL;
+          SELECT conname INTO pk FROM pg_constraint
+           WHERE conrelid = 'tariffs'::regclass AND contype = 'p';
+          IF pk IS NOT NULL THEN
+            EXECUTE format('ALTER TABLE tariffs DROP CONSTRAINT %I', pk);
+          END IF;
+          ALTER TABLE tariffs RENAME COLUMN key TO action;
+          ALTER TABLE tariffs ADD COLUMN id uuid NOT NULL DEFAULT uuid_generate_v4();
+          ALTER TABLE tariffs ADD CONSTRAINT "PK_tariffs" PRIMARY KEY (id);
+          ALTER TABLE tariffs ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
+        END IF;
+      END $$;
+
       -- The enum types are unused once both columns are text.
       DROP TYPE IF EXISTS listings_category_enum;
       DROP TYPE IF EXISTS listing_map_points_category_enum;
