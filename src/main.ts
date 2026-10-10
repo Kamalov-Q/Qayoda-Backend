@@ -138,7 +138,10 @@ async function bootstrap() {
     swaggerOptions: { persistAuthorization: true },
   });
 
-  await app.listen(process.env.PORT ?? 3000, '0.0.0.0', () => {
+  // HOST=127.0.0.1 in production keeps the API reachable only through nginx;
+  // unset, it listens on every interface so a phone on the LAN can reach a
+  // dev machine.
+  await app.listen(process.env.PORT ?? 3000, process.env.HOST || '0.0.0.0', () => {
     console.log(`Server listening on port ${process.env.PORT ?? 3000}`);
     console.log(`Docs: http://localhost:${process.env.PORT ?? 3000}/docs`);
   });

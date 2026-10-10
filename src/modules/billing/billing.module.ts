@@ -17,21 +17,39 @@ import { ClickProvider } from './providers/click/click.provider';
 import { PAYMENT_PROVIDERS } from './providers/payment-provider';
 import { TopupService } from './topup.service';
 import { WalletService } from './wallet.service';
+import { ConfigService } from '@nestjs/config';
+import { PaymeProvider } from './providers/payme/payme.provider';
+import { PaymeWebhookController } from './providers/payme/payme.controller';
+import { FiscalService } from './fiscal.service';
+import { ClickFiscalService } from './providers/click/click-fiscal.service';
+import { BillingEventsListener } from './billing-events.listener';
 
 @Module({
     imports: [
         AuthModule,
         TypeOrmModule.forFeature([Wallet, WalletTransaction, Payment, PaymentWebhookEvent, Tariff, BonusTier, User]),
     ],
-    controllers: [WalletController, ClickWebhookController, BillingAdminController],
+    controllers: [WalletController, ClickWebhookController, PaymeWebhookController, BillingAdminController],
     providers: [
         WalletService,
         PaymentsService,
         TopupService,
         BillingAdminService,
+        FiscalService,
         ClickProvider,
-        // Adding Payme later: add PaymeProvider here, to the list below, and its controller above.
-        { provide: PAYMENT_PROVIDERS, useFactory: (click: ClickProvider) => [click], inject: [ClickProvider] },
+        ClickFiscalService,
+        PaymeProvider,
+        BillingEventsListener,
+        // What the app may offer: a provider without its credentials would
+        // hand out checkout links that cannot work, so it is left out.
+        {
+            provide: PAYMENT_PROVIDERS,
+            useFactory: (config: ConfigService, click: ClickProvider, payme: PaymeProvider) => [
+                ...(config.get('CLICK_SERVICE_ID') && config.get('CLICK_SECRET_KEY') ? [click] : []),
+                ...(config.get('PAYME_MERCHANT_ID') && config.get('PAYME_KEY') ? [payme] : []),
+            ],
+            inject: [ConfigService, ClickProvider, PaymeProvider],
+        },
     ],
     exports: [WalletService],
 })

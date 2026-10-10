@@ -21,6 +21,7 @@ export const TARIFF_ACTION_RE = /^[A-Z][A-Z0-9_]{1,39}$/;
 export const TOPUP_MIN = 1_000;
 export const TOPUP_MAX = 10_000_000;
 export const PAYMENT_TTL_HOURS = 24;
+export const FISCAL_MAX_ATTEMPTS = 5;
 
 export enum TxKind {
     TOPUP = 'TOPUP',
@@ -44,6 +45,18 @@ export enum PaymentStatus {
     PAID = 'PAID',
     CANCELLED = 'CANCELLED',
 }
+
+export enum FiscalStatus {
+    NONE = 'NONE',               // not paid yet, or fiscalisation not configured (FISCAL_* unset)
+    BY_PROVIDER = 'BY_PROVIDER', // Payme fiscalises from our CheckPerformTransaction detail
+    PENDING = 'PENDING',         // we must submit (Click)
+    SENDING = 'SENDING',         // claimed by one submitter — nobody else may send it
+    SENT = 'SENT',
+    FAILED = 'FAILED',           // gave up after FISCAL_MAX_ATTEMPTS; an admin looks at fiscal_response
+}
+
+/** A SENDING claim older than this is a crashed submit and may be retried. */
+export const FISCAL_CLAIM_STALE_MINUTES = 15;
 
 /** numeric(14,2) comes out of pg as a string; all arithmetic is integer tiyin. */
 export const toTiyin = (v: string | number): number => Math.round(Number(v) * 100);

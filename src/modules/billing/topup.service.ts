@@ -19,11 +19,14 @@ export class TopupService {
         this.providers = new Map(providers.map((p) => [p.kind, p]));
     }
 
-    async createTop(userId: string, amountSum: number, kind: PaymentProviderKind, clientId?: string) {
+    availableProviders(): PaymentProviderKind[] {
+        return [...this.providers.keys()];
+    }
+
+
+    async createTopup(userId: string, amountSum: number, kind: PaymentProviderKind, clientId?: string) {
         const provider = this.providers.get(kind);
-        if (!provider) {
-            throw new BadRequestException({ code: 'PROVIDER_UNAVAILABLE', message: `${kind} is not enabled` });
-        }
+        if (!provider) throw new BadRequestException({ code: 'PROVIDER_UNAVAILABLE', message: `${kind} is not enabled` });
 
         const amount = fromTiyin(toTiyin(amountSum));
         const payment = await this.createOrder(userId, kind, amount, clientId);

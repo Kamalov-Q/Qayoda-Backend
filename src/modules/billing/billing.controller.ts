@@ -19,8 +19,9 @@ export class WalletController {
     ) { }
 
     @Get()
-    overview(@CurrentUser() user: AuthUser) {
-        return this.wallet.overview(user.sub);
+    async overview(@CurrentUser() user: AuthUser) {
+        const data = await this.wallet.overview(user.sub);
+        return { ...data, providers: this.topup.availableProviders() }
     }
 
     @Get('transactions')
@@ -31,7 +32,7 @@ export class WalletController {
     @Post('topup')
     @UseGuards(PhoneRequiredGuard)
     createTopup(@CurrentUser() user: AuthUser, @Body() dto: TopupDto) {
-        return this.topup.createTop(user.sub, dto.amount, dto.provider, dto.clientId);
+        return this.topup.createTopup(user.sub, dto.amount, dto.provider, dto.clientId);
     }
 
     @Get('topup/:id')
