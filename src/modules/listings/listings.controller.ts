@@ -38,6 +38,7 @@ import { ErrorResponse } from 'src/shared/responses/error.response';
 import type { ListingRequest } from './types/listing-request.type';
 import type { AuthUser } from 'src/modules/auth/types/auth-user.type';
 import { UpdateImagesDto } from './dto/update-images.dto';
+import { UpdateListingDto } from './dto/update-listing.dto';
 
 // `type` has to be stated: the guarded routes take the request via @Req(), so
 // there is no @Param() for Swagger to reflect a type off.
@@ -249,6 +250,22 @@ export class ListingsController {
   @Get(':id')
   findById(@Param('id', ParseUUIDPipe) id: string) {
     return this.listingsService.findById(id);
+  }
+
+  @ApiOperation({
+    summary: 'Update listing details',
+    description:
+      'Updates scalar fields and offers of a listing owned by the caller.',
+  })
+  @ApiParam(LISTING_ID_PARAM)
+  @ApiBadRequestResponse({ type: ErrorResponse })
+  @ApiUnauthorizedResponse({ type: ErrorResponse })
+  @ApiForbiddenResponse(NOT_OWNER)
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAccessGuard, ListingOwnershipGuard)
+  @Patch(':id')
+  update(@Req() req: ListingRequest, @Body() dto: UpdateListingDto) {
+    return this.listingsService.update(req.listing, dto);
   }
 
   @ApiOperation({

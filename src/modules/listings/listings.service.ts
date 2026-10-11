@@ -355,7 +355,8 @@ export class ListingsService {
   }
 
   async update(listing: Listing, dto: UpdateListingDto) {
-    const patch: Partial<Listing> = { ...dto };
+    const { offers, ...scalarFields } = dto;
+    const patch: Partial<Listing> = { ...scalarFields };
 
     // The area is editable on every listing: on a polygon one the boundary
     // only supplies the starting figure, and the owner may correct it.
@@ -375,7 +376,32 @@ export class ListingsService {
     await this.amenities.assertValidKeys(dto.properties);
     applyFloors(listing, patch, category?.floorCapable ?? false);
 
-    await this.listings.update(listing.id, patch);
+    await this.dataSource.transaction(async (manager) => {
+      const listingRepo = manager.getRepository(Listing);
+      if (Object.keys(patch).length > 0) {
+        await listingRepo.update(listing.id, patch);
+      }
+
+      if (offers && offers.length > 0) {
+        const offerRepo = manager.getRepository(ListingOffer);
+        await offerRepo.delete({ listingId: listing.id });
+        await offerRepo.save(
+          offers.map((o) =>
+            offerRepo.create({
+              ...o,
+              listingId: listing.id,
+              priceUsd: this.rates.toUsd(o.price, o.currency),
+            }),
+          ),
+        );
+        await this.outbox.publish(
+          'listing.price_changed',
+          { listingId: listing.id },
+          manager,
+        );
+      }
+    });
+
     this.cache.clear();
     return this.findById(listing.id);
   }

@@ -1,11 +1,23 @@
-import { OmitType, PartialType } from '@nestjs/swagger';
-import { CreateListingDto } from './create-listing.dto';
+import { ApiPropertyOptional, OmitType, PartialType } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import { IsArray, IsOptional, ValidateNested } from 'class-validator';
+import { CreateListingDto, OfferInputDto } from './create-listing.dto';
 
 /**
- * Scalar fields only. Coordinates, offers and images each own a nested table or
- * a geography column that `Repository.update()` cannot write, so each is edited
- * through its own `PUT /listings/:id/...` endpoint.
+ * Scalar fields + optional offers. Coordinates and images are edited through
+ * their own dedicated endpoints or geometry updates.
  */
 export class UpdateListingDto extends PartialType(
   OmitType(CreateListingDto, ['coordinates', 'offers', 'images'] as const),
-) {}
+) {
+  @ApiPropertyOptional({
+    type: [OfferInputDto],
+    description: 'Replaces the listing offers if provided.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => OfferInputDto)
+  offers?: OfferInputDto[];
+}
+
