@@ -25,6 +25,11 @@ async function bootstrap() {
 
   app.enableCors({ origin: true, credentials: true });
 
+  // All REST routes are prefixed with /api (e.g., /api/click/prepare).
+  // The Click merchant dashboard is configured with /api in the webhook URLs,
+  // so this prefix must match. Swagger docs and health check are excluded.
+  app.setGlobalPrefix('api', { exclude: ['docs', 'health'] });
+
   const config = new DocumentBuilder()
     .setTitle('Growen City API')
     .setDescription(
