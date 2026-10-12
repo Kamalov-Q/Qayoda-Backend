@@ -355,7 +355,7 @@ export class ListingsService {
   }
 
   async update(listing: Listing, dto: UpdateListingDto) {
-    const { offers, ...scalarFields } = dto;
+    const { offers, point, coordinates, ...scalarFields } = dto;
     const patch: Partial<Listing> = { ...scalarFields };
 
     // The area is editable on every listing: on a polygon one the boundary
@@ -378,8 +378,42 @@ export class ListingsService {
 
     await this.dataSource.transaction(async (manager) => {
       const listingRepo = manager.getRepository(Listing);
+
+      let geometryChanged = false;
+      if (coordinates) {
+        const geom = await this.geo.toValidatedPolygon(coordinates);
+        await manager.query(
+          `UPDATE listings
+           SET geom     = ST_SetSRID(ST_GeomFromGeoJSON($1), 4326)::geography,
+               centroid = ST_Centroid(ST_SetSRID(ST_GeomFromGeoJSON($1), 4326))::geography,
+               area_m2  = COALESCE($3, ROUND(ST_Area(ST_SetSRID(ST_GeomFromGeoJSON($1), 4326)::geography)::numeric, 1)),
+               updated_at = now()
+           WHERE id = $2`,
+          [JSON.stringify(geom), listing.id, patch.areaM2 ?? null],
+        );
+        geometryChanged = true;
+      } else if (point) {
+        await manager.query(
+          `UPDATE listings
+           SET geom     = NULL,
+               centroid = ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+               updated_at = now()
+           WHERE id = $3`,
+          [point[0], point[1], listing.id],
+        );
+        geometryChanged = true;
+      }
+
       if (Object.keys(patch).length > 0) {
         await listingRepo.update(listing.id, patch);
+      }
+
+      if (geometryChanged) {
+        await this.outbox.publish(
+          'listing.geometry_changed',
+          { listingId: listing.id },
+          manager,
+        );
       }
 
       if (offers && offers.length > 0) {

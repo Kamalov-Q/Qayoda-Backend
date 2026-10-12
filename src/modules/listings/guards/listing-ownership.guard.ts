@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { UserRole } from '../../../shared/enums/auth.enum';
 import { ListingRepository } from '../repositories/listing.repository';
 import { ListingRequest } from '../types/listing-request.type';
 
@@ -16,13 +17,14 @@ export class ListingOwnershipGuard implements CanActivate {
     const req = context.switchToHttp().getRequest<ListingRequest>();
     const listingId: string = req.params.id;
     const userId: string | undefined = req.user?.sub;
+    const isAdmin = req.user?.role === UserRole.ADMIN;
 
     const listing = await this.listings.findOneBy({ id: listingId });
     // Checks the LISTING, not the id: `listingId` comes from the route and is
     // always set, so this branch never fired — a listing that did not exist
     // fell through to the ownership check and came back as 403 "not yours".
     if (!listing) throw new NotFoundException('Listing not found');
-    if (!userId || listing.ownerId !== userId)
+    if (!userId || (listing.ownerId !== userId && !isAdmin))
       throw new ForbiddenException('Not your listing');
 
     req.listing = listing;
