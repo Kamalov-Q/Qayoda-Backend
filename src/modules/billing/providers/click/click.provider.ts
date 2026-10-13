@@ -58,7 +58,9 @@ export class ClickProvider implements PaymentProvider {
       service_id: this.config.getOrThrow<string>('CLICK_SERVICE_ID'),
       merchant_id: this.config.getOrThrow<string>('CLICK_MERCHANT_ID'),
       amount: payment.amount,
-      transaction_param: payment.id,
+      // Click requires a numeric transaction_param (UUID is rejected).
+      // prepareId is an auto-increment integer assigned at insert time.
+      transaction_param: String(payment.prepareId),
       return_url: this.config.getOrThrow<string>('CLICK_RETURN_URL'),
     });
     return `${CLICK_PAY_URL}?${params.toString()}`;
@@ -84,7 +86,7 @@ export class ClickProvider implements PaymentProvider {
     if (b.action !== '0') return this.reply(b, CLICK.BAD_ACTION);
     if (!signatureValid) return this.reply(b, CLICK.SIGN_FAILED);
 
-    const payment = await this.payments.findByMerchantRef(this.kind, b.merchant_trans_id);
+    const payment = await this.findByClickRef(b.merchant_trans_id);
     if (!payment) return this.reply(b, CLICK.NOT_FOUND);
     if (payment.status === PaymentStatus.PAID) return this.reply(b, CLICK.ALREADY_PAID);
     if (payment.status === PaymentStatus.CANCELLED) return this.reply(b, CLICK.CANCELLED);
@@ -100,7 +102,7 @@ export class ClickProvider implements PaymentProvider {
     if (b.action !== '1') return this.reply(b, CLICK.BAD_ACTION);
     if (!signatureValid) return this.reply(b, CLICK.SIGN_FAILED);
 
-    const payment = await this.payments.findByMerchantRef(this.kind, b.merchant_trans_id);
+    const payment = await this.findByClickRef(b.merchant_trans_id);
     if (!payment) return this.reply(b, CLICK.NOT_FOUND);
     if (payment.status === PaymentStatus.PAID) return this.reply(b, CLICK.ALREADY_PAID);
     if (payment.status === PaymentStatus.CANCELLED) return this.reply(b, CLICK.CANCELLED);
@@ -136,6 +138,12 @@ export class ClickProvider implements PaymentProvider {
     const expected = Buffer.from(buildSignString(b, secret, complete));
     const given = Buffer.from(b.sign_string.toLowerCase());
     return expected.length === given.length && timingSafeEqual(expected, given);
+  }
+
+  private findByClickRef(merchantTransId: string | undefined): Promise<Payment | null> {
+    const id = Number(merchantTransId);
+    if (!Number.isInteger(id) || id <= 0) return Promise.resolve(null);
+    return this.payments.findByPrepareId(this.kind, id);
   }
 
   private amountMatches(clickAmount: string, ours: string): boolean {

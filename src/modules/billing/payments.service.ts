@@ -56,6 +56,10 @@ export class PaymentsService {
         return this.payments.findOne({ where: { id: ref, provider } });
     }
 
+    findByPrepareId(provider: PaymentProviderKind, prepareId: number): Promise<Payment | null> {
+        return this.payments.findOne({ where: { prepareId, provider } });
+    }
+
     async findByProviderTxn(provider: PaymentProviderKind, providerTxnId: string | undefined): Promise<Payment | null> {
         if (!providerTxnId) return null;
         return this.payments.findOne({ where: { provider, providerTxnId } });
