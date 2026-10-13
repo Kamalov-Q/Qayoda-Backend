@@ -1,10 +1,11 @@
-import { BadRequestException, HttpException, HttpStatus, Injectable } from "@nestjs/common";
+import { BadRequestException, HttpException, HttpStatus, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { Wallet } from "./entities/wallet.entity";
 import { WalletTransaction } from "./entities/wallet-transaction.entity";
 import { Tariff } from "./entities/tariff.entity";
 import { BonusTier } from "./entities/bonus-tier.entity";
+import { Payment } from "./entities/payment.entity";
 import { fromTiyin, TariffAction, toTiyin, TxKind } from "./billing.constants";
 import { User } from "../users/entities/user.entity";
 import { UserRole } from "src/shared/enums";
@@ -21,13 +22,15 @@ export class WalletService {
 
     async overview(userId: string) {
         const balance = await this.getBalance(this.dataSource.manager, userId);
-        const [tariffs, bonusTiers] = await Promise.all([
+        const [accountNo, tariffs, bonusTiers] = await Promise.all([
+            this.accountNo(userId),
             this.tariffs.find({ where: { isActive: true }, order: { action: 'ASC', price: 'ASC' } }),
             this.tiers.find({ where: { isActive: true }, order: { minAmount: 'ASC' } })
         ]);
 
         return {
             balance,
+            accountNo,
             tariffs: tariffs.map((t) => ({
                 id: t.id, action: t.action, nameUz: t.nameUz, nameRu: t.nameRu, price: t.price, durationDays: t.durationDays,
             })),
@@ -42,6 +45,47 @@ export class WalletService {
         });
 
         return { items, total, limit, offset };
+    }
+
+    /**
+     * One ledger line with what it came from: for a top-up, its bonus or its
+     * reversal, the provider payment (order number, provider's transaction id,
+     * status, fiscal receipt); for a promotion, the listing.
+     */
+    async getTransaction(userId: string, id: string) {
+        const tx = await this.transactions.findOne({ where: { id, userId } });
+        if (!tx) throw new NotFoundException({ code: 'TRANSACTION_NOT_FOUND', message: 'Transaction not found' });
+
+        const fromPayment = [TxKind.TOPUP, TxKind.TOPUP_BONUS, TxKind.REFUND].includes(tx.kind);
+        // userId in the WHERE too: a referenceId must never open someone else's payment.
+        const payment = fromPayment && tx.referenceId
+            ? await this.dataSource.manager.findOne(Payment, { where: { id: tx.referenceId, userId } })
+            : null;
+
+        return {
+            ...tx,
+            listingId: tx.kind === TxKind.LISTING_PROMOTE ? tx.referenceId : null,
+            payment: payment && {
+                id: payment.id,
+                orderNo: payment.prepareId,
+                provider: payment.provider,
+                status: payment.status,
+                amount: payment.amount,
+                bonusAmount: payment.bonusAmount,
+                providerTxnId: payment.providerTxnId,
+                fiscalStatus: payment.fiscalStatus,
+                createdAt: payment.createdAt,
+                paidAt: payment.paidAt,
+                cancelledAt: payment.cancelledAt,
+                cancelReason: payment.cancelReason,
+            },
+        };
+    }
+
+    /** The short public number the user pays into via Paynet ("Hisob raqami"). */
+    async accountNo(userId: string): Promise<number> {
+        const user = await this.dataSource.manager.findOneOrFail(User, { where: { id: userId }, select: { id: true, accountNo: true } });
+        return user.accountNo;
     }
 
     async getBalance(manager: EntityManager, userId: string): Promise<string> {

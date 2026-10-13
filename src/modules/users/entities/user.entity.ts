@@ -34,6 +34,14 @@ export class User {
   avatarThumbUrl: string | null;
 
   /**
+   * Short public account number ("Hisob raqami"): what the user types into
+   * Paynet, and what the app's Paynet link carries. Never reused.
+   */
+  @Index('uq_users_account_no', { unique: true })
+  @Column({ name: 'account_no', type: 'int', generated: 'increment' })
+  accountNo: number;
+
+  /**
    * Set only by a verified channel — an SMS OTP the user passed, or a phone a
    * provider vouched for. Never writable from the profile endpoint: a user who
    * could type in someone else's number would be handed their account the next

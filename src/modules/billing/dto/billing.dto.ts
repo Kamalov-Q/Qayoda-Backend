@@ -26,6 +26,16 @@ export class TopupDto {
 
 }
 
+export class PaynetLinkQueryDto {
+    @ApiPropertyOptional({ example: 50000, description: "so'm; omitted = the payer types it in Paynet" })
+    @IsOptional()
+    @Type(() => Number)
+    @IsInt()
+    @Min(TOPUP_MIN)
+    @Max(TOPUP_MAX)
+    amount?: number;
+}
+
 export class PageQueryDto {
     @ApiPropertyOptional({ default: 20, maximum: 50 })
     @IsOptional()

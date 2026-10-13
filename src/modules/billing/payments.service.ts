@@ -9,7 +9,7 @@ import {
     PaymentStatus, toTiyin, TxKind,
 } from './billing.constants';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { EventEmitter2 } from '@nestjs/event-emitter';
+import { OutBoxService } from 'src/shared/events/outbox.service';
 import { BILLING_EVENTS, PaymentCancelledEvent, PaymentPaidEvent, PaymentReversedEvent } from './billing.events';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -31,9 +31,14 @@ export class ProviderMismatchError extends Error {
 
 /**
  * The provider-neutral payment state machine: CREATED → PREPARED → PAID, or
- * → CANCELLED; PAID → CANCELLED only through reverse(). Every transition is a
- * conditional UPDATE on the current status, so a retried or concurrent
- * callback can never apply twice.
+ * → CANCELLED; PAID → CANCELLED only through reverse(). Push-model providers
+ * (Paynet) enter directly at PAID through recordPushPayment(). Every
+ * transition is a conditional UPDATE on the current status, so a retried or
+ * concurrent callback can never apply twice.
+ *
+ * Every transition writes its billing.payment.* event to the outbox IN THE
+ * SAME TRANSACTION: the event exists if and only if the change committed, and
+ * OutboxRelayService delivers it even across a crash.
  */
 @Injectable()
 export class PaymentsService {
@@ -42,7 +47,7 @@ export class PaymentsService {
     constructor(
         private readonly dataSource: DataSource,
         private readonly wallet: WalletService,
-        private readonly events: EventEmitter2,
+        private readonly outbox: OutBoxService,
         @InjectRepository(Payment) private readonly payments: Repository<Payment>,
         @InjectRepository(PaymentWebhookEvent) private readonly webhookEvents: Repository<PaymentWebhookEvent>
     ) { }
@@ -71,6 +76,16 @@ export class PaymentsService {
             .where('p.provider = :provider', { provider })
             .andWhere('p.providerCreateTime BETWEEN :from AND :to', { from: String(fromMs), to: String(toMs) })
             .orderBy('p.providerCreateTime', 'ASC')
+            .getMany();
+    }
+
+    /** Paynet reconciliation (GetStatement): the money we kept, by when it arrived. */
+    listPaidBetween(provider: PaymentProviderKind, from: Date, to: Date): Promise<Payment[]> {
+        return this.payments
+            .createQueryBuilder('p')
+            .where('p.provider = :provider AND p.status = :paid', { provider, paid: PaymentStatus.PAID })
+            .andWhere('p.paidAt BETWEEN :from AND :to', { from, to })
+            .orderBy('p.paidAt', 'ASC')
             .getMany();
     }
 
@@ -116,9 +131,9 @@ export class PaymentsService {
     }
 
     /**
-     * Money taken. Locks the row, flips PREPARED→PAID and credits the wallet
-     * (amount + tier bonus) in ONE transaction; a retried or concurrent call
-     * finds it no longer PREPARED and credits nothing. `fiscal` says who sends
+     * Money taken. Locks the row, flips PREPARED→PAID, credits the wallet
+     * (amount + tier bonus) and writes billing.payment.paid in ONE transaction;
+     * a retried or concurrent call finds it no longer PREPARED and credits nothing. `fiscal` says who sends
      * the receipt to the tax authority. Returns false if it was not PREPARED.
      */
     async markPaid(
@@ -160,18 +175,65 @@ export class PaymentsService {
             if (bonus.bonusTiyin > 0) {
                 balance = await this.wallet.credit(manager, payment.userId, bonus.bonusTiyin, TxKind.TOPUP_BONUS, payment.id, `${provider} +${bonus.percent}% bonus`);
             }
-            return { bonusAmount, balance };
+
+            await this.outbox.publish(
+                BILLING_EVENTS.PAYMENT_PAID,
+                { ...new PaymentPaidEvent(payment.id, payment.userId, provider, payment.amount, bonusAmount, balance) },
+                manager,
+            );
+            return { bonusAmount };
         });
 
         if (!outcome) return false;
-
         this.logger.log(`Payment ${payment.id} PAID via ${provider}: ${payment.amount} + ${outcome.bonusAmount} bonus`);
-        // After commit, so a listener never sees a payment that rolled back.
-        this.events.emit(
-            BILLING_EVENTS.PAYMENT_PAID,
-            new PaymentPaidEvent(payment.id, payment.userId, provider, payment.amount, outcome.bonusAmount, outcome.balance),
-        );
         return true;
+    }
+
+    /**
+     * A PUSH-model top-up (Paynet): the provider pays an account, not an order
+     * we made, so the row is born PAID. Insert + wallet credit + outbox event
+     * are ONE transaction; the unique (provider, provider_txn_id) index decides
+     * a duplicate — the loser inserts nothing and gets null.
+     */
+    async recordPushPayment(
+        provider: PaymentProviderKind, userId: string, amountTiyin: number, providerTxnId: string, payload: Json,
+        fiscal: FiscalStatus.PENDING | FiscalStatus.BY_PROVIDER | FiscalStatus.NONE,
+    ): Promise<Payment | null> {
+        const amount = fromTiyin(amountTiyin);
+
+        const outcome = await this.dataSource.transaction(async (manager) => {
+            const bonus = await this.wallet.bonusFor(manager, amountTiyin);
+            const bonusAmount = fromTiyin(bonus.bonusTiyin);
+            const now = String(Date.now());
+
+            // INSERT … RETURNING comes back as plain rows (only UPDATE/DELETE get [rows, count]).
+            const rows: { id: string }[] = await manager.query(
+                `INSERT INTO payments (user_id, provider, amount, bonus_amount, status, provider_txn_id, provider_payload,
+                                       provider_create_time, provider_perform_time, fiscal_status, paid_at)
+                 VALUES ($1, $2, $3, $4, 'PAID', $5, $6::jsonb, $7, $7, $8, now())
+                 ON CONFLICT (provider, provider_txn_id) WHERE provider_txn_id IS NOT NULL DO NOTHING
+                 RETURNING id`,
+                [userId, provider, amount, bonusAmount, providerTxnId, JSON.stringify(payload), now, fiscal],
+            );
+            if (rows.length === 0) return null;
+            const paymentId = rows[0].id;
+
+            let balance = await this.wallet.credit(manager, userId, amountTiyin, TxKind.TOPUP, paymentId, `${provider} ${providerTxnId}`);
+            if (bonus.bonusTiyin > 0) {
+                balance = await this.wallet.credit(manager, userId, bonus.bonusTiyin, TxKind.TOPUP_BONUS, paymentId, `${provider} +${bonus.percent}% bonus`);
+            }
+
+            await this.outbox.publish(
+                BILLING_EVENTS.PAYMENT_PAID,
+                { ...new PaymentPaidEvent(paymentId, userId, provider, amount, bonusAmount, balance) },
+                manager,
+            );
+            return { paymentId, bonusAmount };
+        });
+
+        if (!outcome) return null;
+        this.logger.log(`Payment ${outcome.paymentId} PAID via ${provider}: ${amount} + ${outcome.bonusAmount} bonus`);
+        return this.payments.findOneOrFail({ where: { id: outcome.paymentId } });
     }
 
     async cancel(
@@ -180,18 +242,25 @@ export class PaymentsService {
         payload: Json | null, cancelTimeMs = Date.now(),
     ): Promise<boolean> {
         this.assertProvider(provider, payment);
-        const result = await this.payments
-            .createQueryBuilder().update()
-            .set({
-                status: PaymentStatus.CANCELLED, cancelledAt: () => 'now()', cancelReason: reason, providerError,
-                providerCancelTime: String(cancelTimeMs), ...(payload ? { providerPayload: payload } : {}),
-            })
-            .where('id = :id AND provider = :provider AND status IN (:...open)', { id: payment.id, provider, open: OPEN })
-            .execute();
 
-        if (!result.affected) return false;
-        this.events.emit(BILLING_EVENTS.PAYMENT_CANCELLED, new PaymentCancelledEvent(payment.id, payment.userId, provider, reason));
-        return true;
+        return this.dataSource.transaction(async (manager) => {
+            const result = await manager
+                .createQueryBuilder().update(Payment)
+                .set({
+                    status: PaymentStatus.CANCELLED, cancelledAt: () => 'now()', cancelReason: reason, providerError,
+                    providerCancelTime: String(cancelTimeMs), ...(payload ? { providerPayload: payload } : {}),
+                })
+                .where('id = :id AND provider = :provider AND status IN (:...open)', { id: payment.id, provider, open: OPEN })
+                .execute();
+
+            if (!result.affected) return false;
+            await this.outbox.publish(
+                BILLING_EVENTS.PAYMENT_CANCELLED,
+                { ...new PaymentCancelledEvent(payment.id, payment.userId, provider, reason) },
+                manager,
+            );
+            return true;
+        });
     }
 
     /**
@@ -206,7 +275,7 @@ export class PaymentsService {
         this.assertProvider(provider, payment);
         const total = toTiyin(payment.amount) + toTiyin(payment.bonusAmount);
 
-        const balance = await this.dataSource.transaction(async (manager) => {
+        return this.dataSource.transaction(async (manager) => {
             const [rows]: [{ id: string }[], number] = await manager.query(
                 `UPDATE payments
                     SET status = 'CANCELLED', cancelled_at = now(), cancel_reason = $1, provider_error = $2,
@@ -215,10 +284,11 @@ export class PaymentsService {
                   RETURNING id`,
                 [reason, providerError, String(cancelTimeMs), payment.id, provider],
             );
-            if (rows.length === 0) return null;
+            if (rows.length === 0) return false;
 
+            let balance: string;
             try {
-                return await this.wallet.debit(manager, payment.userId, total, TxKind.REFUND, payment.id, `${provider} reversal`);
+                balance = await this.wallet.debit(manager, payment.userId, total, TxKind.REFUND, payment.id, `${provider} reversal`);
             } catch (err) {
                 // Only "not enough balance" means the money is spent; anything
                 // else is a real failure and must surface as one.
@@ -227,14 +297,14 @@ export class PaymentsService {
                 }
                 throw err;
             }
-        });
 
-        if (balance === null) return false;
-        this.events.emit(
-            BILLING_EVENTS.PAYMENT_REVERSED,
-            new PaymentReversedEvent(payment.id, payment.userId, provider, fromTiyin(total), balance),
-        );
-        return true;
+            await this.outbox.publish(
+                BILLING_EVENTS.PAYMENT_REVERSED,
+                { ...new PaymentReversedEvent(payment.id, payment.userId, provider, fromTiyin(total), balance) },
+                manager,
+            );
+            return true;
+        });
     }
 
     // ─── fiscal bookkeeping ───────────────────────────────────────────────

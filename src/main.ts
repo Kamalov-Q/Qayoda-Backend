@@ -1,5 +1,7 @@
 import { ValidationPipe } from '@nestjs/common';
-import { NestFactory } from '@nestjs/core';
+import { HttpAdapterHost, NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { PaynetParseErrorFilter } from './modules/billing/providers/paynet/paynet-parse-error.filter';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import {
@@ -13,7 +15,13 @@ import {
 import { PresenceResponse } from './modules/chat/responses/receipt.response';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // Behind nginx on the same host: take the client IP from X-Forwarded-For,
+  // or Paynet's IP allowlist sees 127.0.0.1 for every call.
+  app.set('trust proxy', 'loopback');
+  // Malformed JSON on /api/paynet must still be a JSON-RPC answer (-32700).
+  app.useGlobalFilters(new PaynetParseErrorFilter(app.get(HttpAdapterHost).httpAdapter));
 
   app.useGlobalPipes(
     new ValidationPipe({

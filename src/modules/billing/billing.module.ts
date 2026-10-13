@@ -23,13 +23,15 @@ import { PaymeWebhookController } from './providers/payme/payme.controller';
 import { FiscalService } from './fiscal.service';
 import { ClickFiscalService } from './providers/click/click-fiscal.service';
 import { BillingEventsListener } from './billing-events.listener';
+import { PaynetProvider } from './providers/paynet/paynet.provider';
+import { PaynetWebhookController } from './providers/paynet/paynet.controller';
 
 @Module({
     imports: [
         AuthModule,
         TypeOrmModule.forFeature([Wallet, WalletTransaction, Payment, PaymentWebhookEvent, Tariff, BonusTier, User]),
     ],
-    controllers: [WalletController, ClickWebhookController, PaymeWebhookController, BillingAdminController],
+    controllers: [WalletController, ClickWebhookController, PaymeWebhookController, PaynetWebhookController, BillingAdminController],
     providers: [
         WalletService,
         PaymentsService,
@@ -39,6 +41,9 @@ import { BillingEventsListener } from './billing-events.listener';
         ClickProvider,
         ClickFiscalService,
         PaymeProvider,
+        // Push-model: Paynet pays an account, so it is NOT a PAYMENT_PROVIDERS
+        // entry (those build a checkout URL for an order we created).
+        PaynetProvider,
         BillingEventsListener,
         // What the app may offer: a provider without its credentials would
         // hand out checkout links that cannot work, so it is left out.
