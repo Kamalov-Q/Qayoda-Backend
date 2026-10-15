@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { AuthIdentity } from 'src/modules/auth/entities/auth-identity.entity';
 import { UserRole, UserStatus } from 'src/shared/enums';
+import type { Gender, SocialLinks } from '../user-profile.constants';
 
 @Entity('users')
 export class User {
@@ -91,6 +92,44 @@ export class User {
   /** Trust badge shown on listings. Manual admin verification. */
   @Column({ name: 'is_verified_realtor', type: 'boolean', default: false })
   isVerifiedRealtor: boolean;
+
+  // ---- who they are, as they describe themselves -------------------------
+
+  /**
+   * Date of birth, not an age.
+   *
+   * An age column is wrong within a year of being written and there is no way
+   * to correct it without asking everybody again; this one answers the same
+   * question forever. `date`, not `timestamptz`: a birthday is a calendar
+   * day, and storing it with a zone moves it across the date line.
+   *
+   * Nullable because every account that existed before this column did has
+   * none. New registrations are required to supply it — enforced in the
+   * profile DTO, not here, so the old rows stay readable.
+   */
+  @Column({ name: 'birth_date', type: 'date', nullable: true })
+  birthDate: string | null;
+
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  gender: Gender | null;
+
+  /** Where they are, in their own words. Not geocoded and not a listing. */
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  address: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  bio: string | null;
+
+  /**
+   * Platform → handle or URL, for the six the app draws icons for.
+   *
+   * One jsonb rather than six columns: the set is presentational, and adding
+   * or dropping a platform should be a change to one constant and an icon,
+   * not a migration. Keys are validated against SOCIAL_PLATFORMS on the way
+   * in, so nothing unknown is ever stored.
+   */
+  @Column({ name: 'social_links', type: 'jsonb', nullable: true })
+  socialLinks: SocialLinks | null;
 
   @OneToMany(() => AuthIdentity, (i) => i.user)
   identities: AuthIdentity[];

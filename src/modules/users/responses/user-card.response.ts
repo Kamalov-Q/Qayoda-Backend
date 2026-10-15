@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import type { SocialLinks } from '../user-profile.constants';
 
 /**
  * The profile card another user opens from a chat or a listing — the public
@@ -41,6 +42,21 @@ export class UserCardResponse {
 
   @ApiProperty({ description: 'Manually verified by an admin.' })
   isVerifiedRealtor: boolean;
+
+  @ApiProperty({
+    nullable: true,
+    description: 'Whatever they wrote about themselves.',
+  })
+  bio: string | null;
+
+  @ApiProperty({
+    nullable: true,
+    description:
+      'Handle or URL per platform, for the six the app draws icons for. ' +
+      'Age, gender and address are NOT public and never appear here.',
+    example: { instagram: 'growen.uz' },
+  })
+  socialLinks: SocialLinks | null;
 
   @ApiProperty({ description: 'When they joined.' }) createdAt: Date;
 }

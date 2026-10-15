@@ -16,6 +16,7 @@ import { ReportsService } from '../reports/reports.service';
 import { ChatReportsService } from '../reports/chat-reports.service';
 import { StoriesService } from '../stories/stories.service';
 import { VerificationService } from '../verification/verification.service';
+import { ageFrom } from '../users/user-profile.constants';
 import { RatesService } from '../../shared/rates/rates.service';
 import { EskizService } from '../notifications/eskiz.service';
 import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
@@ -170,6 +171,15 @@ export class AdminService {
         role: u.role,
         status: u.status,
         isVerifiedRealtor: u.isVerifiedRealtor,
+        // Everything they told us, age included. The public card withholds
+        // these three on purpose; moderation is the case they were collected
+        // for, so this is the one view that shows them.
+        birthDate: u.birthDate,
+        age: ageFrom(u.birthDate),
+        gender: u.gender,
+        address: u.address,
+        bio: u.bio,
+        socialLinks: u.socialLinks,
         isOnline: u.isOnline,
         lastSeenAt: u.lastSeenAt,
         createdAt: u.createdAt,
@@ -281,6 +291,10 @@ export class AdminService {
         ratingAvg: l.ratingAvg,
         ratingCount: l.ratingCount,
         viewCount: l.viewCount,
+        // When the paid TOP placement runs out, or null if it never had one.
+        // A past date is a listing that WAS promoted, which is worth seeing
+        // in the queue — it says somebody paid and may pay again.
+        promotedUntil: l.promotedUntil,
         offers: l.offers?.map((o) => ({
           purpose: o.purpose,
           price: o.price,
@@ -487,6 +501,12 @@ export class AdminService {
       role: u.role,
       status: u.status,
       isVerifiedRealtor: u.isVerifiedRealtor,
+      birthDate: u.birthDate,
+      age: ageFrom(u.birthDate),
+      gender: u.gender,
+      address: u.address,
+      bio: u.bio,
+      socialLinks: u.socialLinks,
       isOnline: u.isOnline,
       lastSeenAt: u.lastSeenAt,
       createdAt: u.createdAt,

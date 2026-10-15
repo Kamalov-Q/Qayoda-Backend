@@ -7,6 +7,7 @@ import { UserRepository } from './repositories/user.repository';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 import { UsersFacade } from './users.facade';
+import { RegionsController } from './regions.controller';
 
 /**
  * The user record and everything read off it — profile, avatar, presence, and
@@ -19,7 +20,7 @@ import { UsersFacade } from './users.facade';
  */
 @Module({
   imports: [TypeOrmModule.forFeature([User]), ListingsModule, AuthModule],
-  controllers: [UsersController],
+  controllers: [UsersController, RegionsController],
   providers: [UsersService, UsersFacade, UserRepository],
   exports: [UsersFacade, UsersService, TypeOrmModule],
 })

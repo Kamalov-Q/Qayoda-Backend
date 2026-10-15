@@ -13,6 +13,10 @@ import {
   PublicProfileResponse,
 } from './responses/profile.response';
 import { UserCardResponse } from './responses/user-card.response';
+import {
+  ageFrom,
+  type SocialLinks,
+} from './user-profile.constants';
 
 /**
  * Who a user *is*: profile, avatar, presence. Proving who they are is
@@ -48,9 +52,37 @@ export class UsersService {
   ): Promise<ProfileResponse> {
     await this.findOrFail(userId);
 
-    const patch: Partial<Pick<User, 'name' | 'surname'>> = {};
+    // Named columns, not Partial<User>: the entity carries an `identities`
+    // relation, and update() refuses a type that admits it.
+    const patch: Partial<
+      Pick<
+        User,
+        | 'name'
+        | 'surname'
+        | 'birthDate'
+        | 'gender'
+        | 'address'
+        | 'bio'
+        | 'socialLinks'
+      >
+    > = {};
     if (dto.name !== undefined) patch.name = dto.name;
     if (dto.surname !== undefined) patch.surname = dto.surname;
+    if (dto.birthDate !== undefined) patch.birthDate = dto.birthDate;
+    if (dto.gender !== undefined) patch.gender = dto.gender;
+    if (dto.address !== undefined) patch.address = dto.address;
+    if (dto.bio !== undefined) patch.bio = dto.bio;
+
+    // Replaced whole, not merged: the form always sends every platform it
+    // knows about, and a merge would make clearing one impossible — the key
+    // would simply be absent and the old value would survive. The DTO turns
+    // a blank field into undefined, which drops out here.
+    if (dto.socialLinks !== undefined) {
+      const links = Object.fromEntries(
+        Object.entries(dto.socialLinks).filter(([, v]) => !!v),
+      ) as SocialLinks;
+      patch.socialLinks = Object.keys(links).length > 0 ? links : null;
+    }
 
     if (Object.keys(patch).length > 0) {
       await this.users.update(userId, patch);
@@ -115,6 +147,15 @@ export class UsersService {
       avatarUrl: user.avatarUrl,
       avatarThumbUrl: user.avatarThumbUrl,
       isVerifiedRealtor: user.isVerifiedRealtor,
+      // Bio and socials only.
+      //
+      // Age, gender and address are deliberately NOT here. They were asked
+      // for at registration, not written to be published, and a marketplace
+      // profile that quietly prints a stranger's age and street is a
+      // different product from the one anybody agreed to. The dashboard sees
+      // them; the public does not.
+      bio: user.bio,
+      socialLinks: user.socialLinks,
       createdAt: user.createdAt,
     };
   }
@@ -278,6 +319,15 @@ export class UsersService {
       phoneNumber: user.phoneNumber,
       language: user.language,
       isVerifiedRealtor: user.isVerifiedRealtor,
+      // Their own profile, so everything they told us comes back — including
+      // the birth date itself, because the edit form has to show what it is
+      // about to overwrite.
+      birthDate: user.birthDate,
+      age: ageFrom(user.birthDate),
+      gender: user.gender,
+      address: user.address,
+      bio: user.bio,
+      socialLinks: user.socialLinks,
       createdAt: user.createdAt,
     };
   }

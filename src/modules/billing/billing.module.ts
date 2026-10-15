@@ -25,13 +25,14 @@ import { ClickFiscalService } from './providers/click/click-fiscal.service';
 import { BillingEventsListener } from './billing-events.listener';
 import { PaynetProvider } from './providers/paynet/paynet.provider';
 import { PaynetWebhookController } from './providers/paynet/paynet.controller';
+import { TariffsController } from './tariffs.controller';
 
 @Module({
     imports: [
         AuthModule,
         TypeOrmModule.forFeature([Wallet, WalletTransaction, Payment, PaymentWebhookEvent, Tariff, BonusTier, User]),
     ],
-    controllers: [WalletController, ClickWebhookController, PaymeWebhookController, PaynetWebhookController, BillingAdminController],
+    controllers: [WalletController, TariffsController, ClickWebhookController, PaymeWebhookController, PaynetWebhookController, BillingAdminController],
     providers: [
         WalletService,
         PaymentsService,

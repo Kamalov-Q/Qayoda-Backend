@@ -74,7 +74,7 @@ export class PaymeProvider implements PaymentProvider {
             response = this.error(id, PAYME.SYSTEM);
         }
 
-        await this.payments.logWebhook(this.kind, body?.method ?? null, (body as Record<string, unknown>) ?? {}, authorized, response);
+        await this.payments.logWebhook(this.kind, body?.method ?? null, (body) ?? {}, authorized, response);
         return response;
     }
 
@@ -126,7 +126,7 @@ export class PaymeProvider implements PaymentProvider {
         const createTime = Date.now();
         const prepared = await this.payments.markPrepared(this.kind, payment, txnId, { payme_id: txnId, payme_time: p.time }, createTime);
         if (!prepared) return this.error(id, PAYME.ORDER_NOT_AVAILABLE, 'payment_id');
-        return this.createResult(id, { ...payment, providerCreateTime: String(createTime) } as Payment);
+        return this.createResult(id, { ...payment, providerCreateTime: String(createTime) });
     }
 
     private async perform(id: unknown, p: Record<string, any>): Promise<RpcResponse> {
@@ -163,7 +163,7 @@ export class PaymeProvider implements PaymentProvider {
 
         if (payment.status === PaymentStatus.PREPARED) {
             await this.payments.cancel(this.kind, payment, 'provider_cancel', reason, null, cancelTime);
-            return this.cancelResult(id, { ...payment, status: PaymentStatus.CANCELLED, providerCancelTime: String(cancelTime), providerError: reason } as Payment);
+            return this.cancelResult(id, { ...payment, status: PaymentStatus.CANCELLED, providerCancelTime: String(cancelTime), providerError: reason });
         }
 
         if (payment.status === PaymentStatus.CREATED) return this.error(id, PAYME.TXN_NOT_FOUND);
