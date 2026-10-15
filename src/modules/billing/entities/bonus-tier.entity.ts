@@ -1,8 +1,10 @@
 
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, Unique } from 'typeorm';
+import { Check, Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, Unique } from 'typeorm';
 
 @Entity('topup_bonus_tiers')
 @Unique('UQ_topup_bonus_tiers_min_amount', ['minAmount'])
+// A typo in the dashboard should not be able to mint money.
+@Check('topup_bonus_tiers_percent_check', '"percent" BETWEEN 0 AND 100')
 export class BonusTier {
     @PrimaryGeneratedColumn('uuid')
     id: string;

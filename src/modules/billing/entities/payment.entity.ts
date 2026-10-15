@@ -5,6 +5,8 @@ import { FiscalStatus, PaymentProviderKind, PaymentStatus } from '../billing.con
 @Index('IDX_payments_user_created', ['userId', 'createdAt'])
 @Index('IDX_payments_status_created', ['status', 'createdAt'])
 @Index('IDX_payments_provider_create_time', ['provider', 'providerCreateTime'])
+// Paynet's GetStatement asks for one provider's paid rows in a date range.
+@Index('IDX_payments_provider_paid_at', ['provider', 'paidAt'])
 // The app's own key for one top-up attempt: a retried or double-tapped
 // request finds the order it already made instead of creating a second.
 @Index('IDX_payments_user_client', ['userId', 'clientId'], { unique: true, where: 'client_id IS NOT NULL' })
