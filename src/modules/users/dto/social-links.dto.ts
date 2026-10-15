@@ -1,25 +1,36 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsOptional, IsString, MaxLength } from 'class-validator';
-import { SOCIAL_HANDLE_MAX } from '../user-profile.constants';
+import {
+  SOCIAL_HANDLE_MAX,
+  normalizeSocialHandle,
+  type SocialPlatform,
+} from '../user-profile.constants';
 
-const clean = ({ value }: { value: unknown }) => {
-  if (typeof value !== 'string') return value;
-  const trimmed = value.trim();
-  // An empty string means "remove it", which the service reads as undefined.
-  return trimmed === '' ? undefined : trimmed;
-};
+/**
+ * Canonicalise on the way in: a handle, an @handle, a pasted link or a
+ * scheme-less one all collapse to the same bare handle. Whatever is left
+ * empty — '', or a WhatsApp entry with no digits in it — means "remove it",
+ * which the service reads as undefined.
+ */
+const clean = (platform: SocialPlatform) =>
+  ({ value }: { value: unknown }) => {
+    if (typeof value !== 'string') return value;
+    const handle = normalizeSocialHandle(platform, value);
+    return handle === '' ? undefined : handle;
+  };
 
-const handle = () =>
+const handle = (platform: SocialPlatform) =>
   function (target: object, key: string) {
     ApiPropertyOptional({
       maxLength: SOCIAL_HANDLE_MAX,
-      description: 'Handle or full URL, as the user typed it.',
+      description:
+        'Handle, @handle or full profile URL. Stored as a bare handle (digits for WhatsApp).',
     })(target, key);
     IsOptional()(target, key);
     IsString()(target, key);
     MaxLength(SOCIAL_HANDLE_MAX)(target, key);
-    Transform(clean)(target, key);
+    Transform(clean(platform))(target, key);
   };
 
 /**
@@ -35,10 +46,10 @@ const handle = () =>
  * render time, not the database's at write time.
  */
 export class SocialLinksDto {
-  @handle() tiktok?: string;
-  @handle() instagram?: string;
-  @handle() facebook?: string;
-  @handle() x?: string;
-  @handle() threads?: string;
-  @handle() whatsapp?: string;
+  @handle('tiktok') tiktok?: string;
+  @handle('instagram') instagram?: string;
+  @handle('facebook') facebook?: string;
+  @handle('x') x?: string;
+  @handle('threads') threads?: string;
+  @handle('whatsapp') whatsapp?: string;
 }
