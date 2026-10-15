@@ -20,7 +20,15 @@ export type SocialPlatform = (typeof SOCIAL_PLATFORMS)[number];
 /** What a profile stores: platform → handle or full URL, as given. */
 export type SocialLinks = Partial<Record<SocialPlatform, string>>;
 
-export const GENDERS = ['MALE', 'FEMALE', 'OTHER'] as const;
+/**
+ * The answers offered. Gender is optional everywhere — declining to say is
+ * expressed by leaving it null, not by a third option.
+ *
+ * The column is a plain varchar with no CHECK, so this list is the only thing
+ * enforcing the set: anything dropped from it is refused by the DTO on the
+ * next write, while rows already holding it keep reading back fine.
+ */
+export const GENDERS = ['MALE', 'FEMALE'] as const;
 export type Gender = (typeof GENDERS)[number];
 
 /** Nobody is 120, and nobody trading property is 5. */
