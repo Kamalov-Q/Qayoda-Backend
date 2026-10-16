@@ -7,7 +7,7 @@ import { Roles, RolesGuard } from '../../shared/guards/roles.guard';
 import { UserRole } from '../../shared/enums';
 import { BillingAdminService } from './billing-admin.service';
 import {
-    AdjustWalletDto, AdminPaymentsQueryDto, CreateBonusTierDto, CreateTariffDto, PageQueryDto, PatchBonusTierDto, PatchTariffDto,
+    AdjustWalletDto, AdminAdjustmentsQueryDto, AdminPaymentsQueryDto, CreateBonusTierDto, CreateTariffDto, PageQueryDto, PatchBonusTierDto, PatchTariffDto,
 } from './dto/billing.dto';
 
 @ApiTags('admin-billing')
@@ -55,6 +55,16 @@ export class BillingAdminController {
     @Get('payments/:id')
     paymentDetail(@Param('id', ParseUUIDPipe) id: string) {
         return this.admin.paymentDetail(id);
+    }
+
+    /** The audit trail for the endpoint below it. */
+    @Get('wallet-adjustments')
+    listAdjustments(@Query() q: AdminAdjustmentsQueryDto) {
+        return this.admin.listAdjustments(
+            { userId: q.userId, adminId: q.adminId, direction: q.direction },
+            q.limit,
+            q.offset,
+        );
     }
 
     @Post('wallets/:userId/adjust')

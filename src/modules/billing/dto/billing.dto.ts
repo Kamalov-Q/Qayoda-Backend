@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional, OmitType, PartialType } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsBoolean, IsEnum, IsInt, Matches, IsUUID, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min, NotEquals } from "class-validator";
+import { IsBoolean, IsEnum, IsIn, IsInt, Matches, IsUUID, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min, NotEquals } from "class-validator";
 import { PaymentProviderKind, PaymentStatus, TARIFF_ACTION_RE, TARIFF_ACTIONS, TOPUP_MAX, TOPUP_MIN } from "../billing.constants";
 
 export class TopupDto {
@@ -64,6 +64,26 @@ export class AdminPaymentsQueryDto extends PageQueryDto {
     @IsEnum(PaymentProviderKind)
     provider?: PaymentProviderKind;
 
+}
+
+export class AdminAdjustmentsQueryDto extends PageQueryDto {
+    @ApiPropertyOptional({ format: 'uuid', description: 'Only this wallet.' })
+    @IsOptional()
+    @IsUUID()
+    userId?: string;
+
+    @ApiPropertyOptional({ format: 'uuid', description: 'Only adjustments made by this admin.' })
+    @IsOptional()
+    @IsUUID()
+    adminId?: string;
+
+    @ApiPropertyOptional({
+        enum: ['credit', 'debit'],
+        description: 'Money added, or money taken back. Omitted = both.',
+    })
+    @IsOptional()
+    @IsIn(['credit', 'debit'])
+    direction?: 'credit' | 'debit';
 }
 
 export class CreateTariffDto {

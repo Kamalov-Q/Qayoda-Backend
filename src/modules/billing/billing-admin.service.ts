@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, IsNull, Not, Repository } from 'typeorm';
+import { DataSource, IsNull, Not, Repository, SelectQueryBuilder } from 'typeorm';
 import { User } from '../users/entities/user.entity';
 import { WalletTransaction } from './entities/wallet-transaction.entity';
 import { PaymentProviderKind, PaymentStatus, TxKind, fromTiyin, isBuiltInAction, isTimedAction, toTiyin } from './billing.constants';
@@ -11,6 +11,24 @@ import { Tariff } from './entities/tariff.entity';
 import { Wallet } from './entities/wallet.entity';
 import { WalletService } from './wallet.service';
 
+/** One row of the manual-adjustment history, as the raw query returns it. */
+export interface AdjustmentRow {
+    id: string;
+    userId: string;
+    adminId: string | null;
+    amount: string;
+    balanceAfter: string;
+    note: string | null;
+    clientId: string | null;
+    createdAt: Date;
+    userName: string | null;
+    userSurname: string | null;
+    userPhone: string | null;
+    adminName: string | null;
+    adminSurname: string | null;
+    adminPhone: string | null;
+}
+
 @Injectable()
 export class BillingAdminService {
     constructor(
@@ -20,6 +38,7 @@ export class BillingAdminService {
         @InjectRepository(BonusTier) private readonly tiers: Repository<BonusTier>,
         @InjectRepository(Payment) private readonly payments: Repository<Payment>,
         @InjectRepository(Wallet) private readonly wallets: Repository<Wallet>,
+        @InjectRepository(WalletTransaction) private readonly txs: Repository<WalletTransaction>,
     ) { }
 
     // ─── tariffs ──────────────────────────────────────────────────────────
@@ -235,6 +254,80 @@ export class BillingAdminService {
 
         const [items, total] = await Promise.all([qb.getRawMany(), this.wallets.count()]);
         return { items, total, limit, offset };
+    }
+
+    /**
+     * Every manual balance change, newest first — the audit trail behind the
+     * "Bu izoh audit jurnallarida saqlanadi" promise the adjust dialog makes.
+     *
+     * Reads ADMIN_ADJUST rows out of the ledger rather than a second audit
+     * table: the ledger IS the record, so a history built from it cannot
+     * disagree with the balances it explains. Both users are joined by hand
+     * — whose wallet moved, and who moved it — because an entry naming only
+     * a pair of UUIDs answers nothing anyone opens this screen to ask.
+     *
+     * The totals cover the whole filtered set, not the page: "how much has
+     * been handed out by hand" is the question, and a per-page sum would
+     * answer a different one every time the pager moves.
+     */
+    async listAdjustments(
+        filters: { userId?: string; adminId?: string; direction?: 'credit' | 'debit' },
+        limit: number,
+        offset: number,
+    ) {
+        /** The same WHERE for the page and for the totals, by construction. */
+        const scoped = (): SelectQueryBuilder<WalletTransaction> => {
+            const qb = this.txs
+                .createQueryBuilder('tx')
+                .where('tx.kind = :kind', { kind: TxKind.ADMIN_ADJUST });
+            if (filters.userId) qb.andWhere('tx.userId = :userId', { userId: filters.userId });
+            if (filters.adminId) qb.andWhere('tx.adminId = :adminId', { adminId: filters.adminId });
+            if (filters.direction === 'credit') qb.andWhere('tx.amount > 0');
+            if (filters.direction === 'debit') qb.andWhere('tx.amount < 0');
+            return qb;
+        };
+
+        const rows = scoped()
+            .leftJoin(User, 'u', 'u.id = tx.userId')
+            .leftJoin(User, 'a', 'a.id = tx.adminId')
+            .select('tx.id', 'id')
+            .addSelect('tx.userId', 'userId')
+            .addSelect('tx.adminId', 'adminId')
+            .addSelect('tx.amount', 'amount')
+            .addSelect('tx.balanceAfter', 'balanceAfter')
+            .addSelect('tx.note', 'note')
+            .addSelect('tx.clientId', 'clientId')
+            .addSelect('tx.createdAt', 'createdAt')
+            .addSelect('u.name', 'userName')
+            .addSelect('u.surname', 'userSurname')
+            .addSelect('u.phoneNumber', 'userPhone')
+            .addSelect('a.name', 'adminName')
+            .addSelect('a.surname', 'adminSurname')
+            .addSelect('a.phoneNumber', 'adminPhone')
+            .orderBy('tx.createdAt', 'DESC')
+            .limit(limit)
+            .offset(offset);
+
+        // Count and both totals in one pass: three round trips for numbers
+        // drawn from the same rows would be three chances to disagree.
+        const summary = scoped()
+            .select('COUNT(*)::int', 'total')
+            .addSelect('COALESCE(SUM(tx.amount) FILTER (WHERE tx.amount > 0), 0)::text', 'credited')
+            .addSelect('COALESCE(SUM(-tx.amount) FILTER (WHERE tx.amount < 0), 0)::text', 'debited');
+
+        const [items, totals] = await Promise.all([
+            rows.getRawMany<AdjustmentRow>(),
+            summary.getRawOne<{ total: number; credited: string; debited: string }>(),
+        ]);
+
+        return {
+            items,
+            total: totals?.total ?? 0,
+            limit,
+            offset,
+            credited: totals?.credited ?? '0',
+            debited: totals?.debited ?? '0',
+        };
     }
 
     /**
