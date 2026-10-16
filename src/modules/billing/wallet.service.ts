@@ -10,6 +10,17 @@ import { fromTiyin, TariffAction, toTiyin, TxKind } from "./billing.constants";
 import { User } from "../users/entities/user.entity";
 import { UserRole } from "src/shared/enums";
 
+/** Who did it and under which key — carried onto the ledger row. */
+export interface TxAudit {
+    /** The caller's idempotency key, for an adjustment that may be retried. */
+    clientId?: string | null;
+    /** The admin behind a manual adjustment. */
+    adminId?: string | null;
+}
+
+/** The most a numeric(14,2) balance column can hold. */
+export const MAX_BALANCE = 999_999_999_999.99;
+
 @Injectable()
 export class WalletService {
     /** TEMPORARY TRACE — remove once paid actions are confirmed in production.
@@ -171,7 +182,7 @@ export class WalletService {
     async debit(
         manager: EntityManager,
         userId: string, amountTiyin: number, kind: TxKind,
-        referenceId: string | null, note: string | null
+        referenceId: string | null, note: string | null, audit?: TxAudit,
     ): Promise<string> {
         this.assertPositive(amountTiyin);
         const amount = fromTiyin(amountTiyin);
@@ -194,7 +205,8 @@ export class WalletService {
         }
 
         await manager.insert(WalletTransaction, {
-            userId, amount: fromTiyin(-amountTiyin), kind, referenceId, balanceAfter: rows[0].balance, note
+            userId, amount: fromTiyin(-amountTiyin), kind, referenceId, balanceAfter: rows[0].balance, note,
+            clientId: audit?.clientId ?? null, adminId: audit?.adminId ?? null,
         });
         // NOTE: still inside the caller's transaction. A later failure rolls
         // this back, so a DEBITED line is not yet proof the money moved —
@@ -204,10 +216,27 @@ export class WalletService {
 
     }
 
-    async credit(manager: EntityManager, userId: string, amountTiyin: number, kind: TxKind, referenceId: string | null, note: string | null): Promise<string> {
+    async credit(
+        manager: EntityManager, userId: string, amountTiyin: number, kind: TxKind,
+        referenceId: string | null, note: string | null, audit?: TxAudit,
+    ): Promise<string> {
         this.assertPositive(amountTiyin);
         const amount = fromTiyin(amountTiyin);
         await this.ensureWallet(manager, userId);
+
+        // balance is numeric(14,2), so anything from 10^12 up is rejected by
+        // Postgres with 22003 — which reached the caller as a bare 500 after
+        // the transaction had already rolled back. Checked here so an
+        // impossible credit is a 400 that says what the limit is.
+        const current = await this.getBalance(manager, userId);
+        if (Number(current) + Number(amount) > MAX_BALANCE) {
+            throw new BadRequestException({
+                code: 'BALANCE_LIMIT',
+                message: `A wallet cannot exceed ${MAX_BALANCE} so'm (balance is ${current})`,
+                limit: String(MAX_BALANCE),
+                balance: current,
+            });
+        }
 
         // TypeORM answers a raw UPDATE … RETURNING with [rows, affectedCount].
         const [rows]: [{ balance: string }[], number] = await manager.query(
@@ -216,7 +245,10 @@ export class WalletService {
             [amount, userId],
         );
 
-        await manager.insert(WalletTransaction, { userId, amount, kind, referenceId, balanceAfter: rows[0].balance, note });
+        await manager.insert(WalletTransaction, {
+            userId, amount, kind, referenceId, balanceAfter: rows[0].balance, note,
+            clientId: audit?.clientId ?? null, adminId: audit?.adminId ?? null,
+        });
         return rows[0].balance;
     }
 

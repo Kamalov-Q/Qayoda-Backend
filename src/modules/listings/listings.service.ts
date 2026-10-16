@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
   Injectable,
@@ -100,18 +101,25 @@ export class ListingsService {
       ? await this.geo.toValidatedPolygon(dto.coordinates)
       : null;
 
+    // Minted here rather than by the database, so the charge below can name
+    // what it was for. The wallet row is written before the listing exists,
+    // and a ledger entry with no reference_id cannot be traced back to the
+    // thing it paid for — which is most of what a ledger is for.
+    const newListingId = randomUUID();
+
     const listingId = await this.dataSource.transaction(async (manager) => {
       // Pay-as-you-go: publishing costs the LISTING_POST tariff, debited in
       // THIS transaction — any failure below rolls the money back with the
       // listing. Admins and an inactive tariff are free; an empty wallet
       // stops here with 402 INSUFFICIENT_FUNDS before anything is written.
-      await this.wallet.charge(manager, ownerId, 'LISTING_POST');
+      await this.wallet.charge(manager, ownerId, 'LISTING_POST', newListingId);
 
       const listingRepo = manager.getRepository(Listing);
       const offerRepo = manager.getRepository(ListingOffer);
 
       const listing = await listingRepo.save(
         listingRepo.create({
+          id: newListingId,
           ownerId,
           category: dto.category,
           title: dto.title ?? null,

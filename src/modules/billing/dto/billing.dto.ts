@@ -165,5 +165,14 @@ export class AdjustWalletDto {
     @IsNotEmpty()
     @MaxLength(500)
     note: string;
+
+    @ApiPropertyOptional({
+        format: 'uuid',
+        description:
+            "The dashboard's own key for this adjustment. Send the SAME value when retrying and the adjustment happens once: a repeat returns the balance it already produced instead of adjusting again. Omit it and every request is a separate adjustment.",
+    })
+    @IsOptional()
+    @IsUUID()
+    clientId?: string;
 }
 

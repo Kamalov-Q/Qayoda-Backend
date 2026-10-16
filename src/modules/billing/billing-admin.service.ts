@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, IsNull, Not, Repository } from 'typeorm';
 import { User } from '../users/entities/user.entity';
+import { WalletTransaction } from './entities/wallet-transaction.entity';
 import { PaymentProviderKind, PaymentStatus, TxKind, fromTiyin, isBuiltInAction, isTimedAction, toTiyin } from './billing.constants';
 import { AdjustWalletDto, CreateBonusTierDto, CreateTariffDto, PatchBonusTierDto, PatchTariffDto } from './dto/billing.dto';
 import { BonusTier } from './entities/bonus-tier.entity';
@@ -189,19 +190,69 @@ export class BillingAdminService {
         return { items, total, limit, offset };
     }
 
+    /**
+     * Move a balance by hand.
+     *
+     * Idempotent when the caller sends a `clientId`: the same key twice is the
+     * same adjustment, and the second call returns the balance the first one
+     * produced rather than adjusting again. Without that, a double-clicked
+     * "credit 100 000" credited 200 000 — the dashboard disables its button
+     * while the request is in flight, but that only covers one tab, and says
+     * nothing about a retry after a dropped response.
+     *
+     * Who did it goes in `admin_id`, not into the note.
+     */
     async adjustWallet(adminId: string, userId: string, dto: AdjustWalletDto) {
+        try {
+            return await this.runAdjust(adminId, userId, dto);
+        } catch (e) {
+            // Two clicks that raced past the check below both reached the
+            // insert; the unique index refused the second. That is the key
+            // doing its job, so the answer is the first one's result, not an
+            // error. A failed statement aborts its transaction, so this has
+            // to be read outside it.
+            if (dto.clientId && this.isDuplicateClientKey(e)) {
+                const done = await this.dataSource.manager.findOne(WalletTransaction, {
+                    where: { userId, clientId: dto.clientId },
+                    select: { balanceAfter: true },
+                });
+                if (done) return { userId, balance: done.balanceAfter, repeated: true };
+            }
+            throw e;
+        }
+    }
+
+    /** Postgres 23505 against the adjustment's idempotency index. */
+    private isDuplicateClientKey(e: unknown): boolean {
+        const err = e as { code?: string; constraint?: string } | null;
+        return err?.code === '23505'
+            && err?.constraint === 'IDX_wallet_transaction_client';
+    }
+
+    private async runAdjust(adminId: string, userId: string, dto: AdjustWalletDto) {
         const tiyin = toTiyin(dto.amount);
-        const note = `[admin ${adminId}] ${dto.note}`;
 
         return this.dataSource.transaction(async (manager) => {
-            const user = await manager.findOne(User, { where: { id: userId }, select: {id: true} });
+            const user = await manager.findOne(User, { where: { id: userId }, select: { id: true } });
             if (!user) throw new NotFoundException({ code: 'USER_NOT_FOUND', message: 'User not found' });
 
-            const balance = tiyin > 0
-                ? await this.wallet.credit(manager, userId, tiyin, TxKind.ADMIN_ADJUST, null, note)
-                : await this.wallet.debit(manager, userId, -tiyin, TxKind.ADMIN_ADJUST, null, note);
+            // Already done under this key: hand back what it produced. Read
+            // inside the transaction, so two simultaneous clicks serialise on
+            // the unique index below rather than both passing this check.
+            if (dto.clientId) {
+                const done = await manager.findOne(WalletTransaction, {
+                    where: { userId, clientId: dto.clientId },
+                    select: { balanceAfter: true },
+                });
+                if (done) return { userId, balance: done.balanceAfter, repeated: true };
+            }
 
-            return { userId, balance };
+            const audit = { clientId: dto.clientId ?? null, adminId };
+            const balance = tiyin > 0
+                ? await this.wallet.credit(manager, userId, tiyin, TxKind.ADMIN_ADJUST, null, dto.note, audit)
+                : await this.wallet.debit(manager, userId, -tiyin, TxKind.ADMIN_ADJUST, null, dto.note, audit);
+
+            return { userId, balance, repeated: false };
         });
     }
 } 

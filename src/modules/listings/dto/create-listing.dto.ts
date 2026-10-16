@@ -1,6 +1,7 @@
 import {
   ArrayMaxSize,
   ArrayMinSize,
+  ArrayUnique,
   IsArray,
   IsEnum,
   Matches,
@@ -222,10 +223,18 @@ export class CreateListingDto {
     type: [OfferInputDto],
     minItems: 1,
     description:
-      'At least one offer is required — a listing cannot be published without a price.',
+      'At least one offer is required — a listing cannot be published without a price. One offer per purpose: a listing cannot be for sale at two different prices.',
   })
   @IsArray()
   @ArrayMinSize(1)
+  // One per purpose, enforced here because the database enforces it too.
+  // Without this the duplicate reached Postgres, broke a unique index and
+  // came back as a 500 — after the wallet had already been charged (the
+  // transaction rolled the money back, but the caller was told "Internal
+  // server error" for what is a plain validation mistake).
+  @ArrayUnique<OfferInputDto>((offer) => offer.purpose, {
+    message: 'offers must have one entry per purpose',
+  })
   @ValidateNested({ each: true })
   @Type(() => OfferInputDto)
   offers: OfferInputDto[];

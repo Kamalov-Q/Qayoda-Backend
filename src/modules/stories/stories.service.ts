@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
@@ -235,11 +236,17 @@ export class StoriesService {
     // Pay-as-you-go: a story costs the STORY_POST tariff, debited in the same
     // transaction that creates it — a failed insert refunds by rollback, and
     // an empty wallet stops here with 402 INSUFFICIENT_FUNDS.
+    // Minted here, not by the database: the charge is written before the
+    // story exists, and a ledger row with no reference_id cannot be traced
+    // back to what it paid for.
+    const newStoryId = randomUUID();
+
     const saved = await this.dataSource.transaction(async (manager) => {
-      await this.wallet.charge(manager, authorId, 'STORY_POST');
+      await this.wallet.charge(manager, authorId, 'STORY_POST', newStoryId);
       const repo = manager.getRepository(Story);
       return repo.save(
         repo.create({
+          id: newStoryId,
           authorId,
           type: dto.type,
           mediaUrl: dto.mediaUrl ?? null,
