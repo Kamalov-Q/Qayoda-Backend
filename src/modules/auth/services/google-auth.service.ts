@@ -2,6 +2,7 @@ import {
   ForbiddenException,
   Injectable,
   Logger,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -28,13 +29,34 @@ export class GoogleAuthService {
       config.get<string>('GOOGLE_CLIENT_ID_WEB'),
     ].filter((id): id is string => !!id);
 
-    // Fail at boot, not at the first sign-in. With an empty list the audience
-    // check has nothing to match and every Google login 401s with a message
-    // that points at the token rather than at the missing config.
+    // Unconfigured means this provider is OFF, not that the server is broken.
+    //
+    // This used to throw here. That reads well — fail at boot, not at the
+    // first sign-in — but it makes an OPTIONAL provider able to take the
+    // whole API down: removing the Google ids (unused, since the app signs in
+    // with PHONE and TELEGRAM) left Nest unable to construct this service, so
+    // every request answered 502 while pm2 restarted it in a loop.
+    //
+    // Same rule as the payment providers, which register only when they have
+    // credentials: no ids, no Google sign-in, everything else keeps serving.
     if (this.audiences.length === 0) {
-      throw new Error(
-        'Set at least one of GOOGLE_CLIENT_ID_ANDROID / _IOS / _WEB',
+      this.logger.warn(
+        'Google sign-in is DISABLED: none of GOOGLE_CLIENT_ID_ANDROID / _IOS / _WEB is set',
       );
+    }
+  }
+
+  /**
+   * Refused at the endpoint instead, where the message can say what is
+   * actually wrong. An empty audience list would otherwise 401 every token
+   * and point the blame at the client.
+   */
+  private assertConfigured(): void {
+    if (this.audiences.length === 0) {
+      throw new ServiceUnavailableException({
+        code: 'GOOGLE_NOT_CONFIGURED',
+        message: 'Google sign-in is not configured on this server',
+      });
     }
   }
 
@@ -61,6 +83,7 @@ export class GoogleAuthService {
   }
 
   async signIn(idToken: string, lang: 'uz' | 'ru' = 'uz') {
+    this.assertConfigured();
     const p = await this.verify(idToken);
 
     const { user, isNew } = await this.identities.resolve({
@@ -86,6 +109,7 @@ export class GoogleAuthService {
   }
 
   async link(userId: string, idToken: string) {
+    this.assertConfigured();
     const p = await this.verify(idToken);
     await this.identities.link(userId, {
       provider: AuthProvider.GOOGLE,

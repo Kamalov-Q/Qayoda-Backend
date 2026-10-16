@@ -34,7 +34,43 @@ export const PAYME_TIMEOUT_MS = 43_200_000; // 12 h
 
 // ──────────────────────────────────────────────────────────────────────────
 
-type Rpc = { id?: unknown; method?: string; params?: Record<string, any> };
+/**
+ * Everything Payme sends across its six methods, in one shape.
+ *
+ * Every field is `unknown` and narrowed where it is used, rather than typed
+ * optimistically: this is a webhook body from outside, so "a string arrived"
+ * is a thing to check, not to assume. It cannot be a DTO class either — the
+ * global ValidationPipe runs `forbidNonWhitelisted`, which would reject
+ * Payme's own extra fields outright.
+ *
+ *   CheckPerformTransaction  amount, account
+ *   CreateTransaction        id, time, amount, account
+ *   PerformTransaction       id
+ *   CancelTransaction        id, reason
+ *   CheckTransaction         id
+ *   GetStatement             from, to
+ */
+export interface PaymeParams {
+    id?: unknown;
+    time?: unknown;
+    amount?: unknown;
+    reason?: unknown;
+    from?: unknown;
+    to?: unknown;
+    account?: { payment_id?: unknown } | null;
+}
+
+/** What markPrepared stores for a Payme transaction. */
+interface PaymePayload {
+    payme_id?: unknown;
+    payme_time?: unknown;
+}
+
+/** A value Payme may send as either a string or a number. */
+const asRef = (v: unknown): string | undefined =>
+    typeof v === 'string' ? v : typeof v === 'number' ? String(v) : undefined;
+
+type Rpc = { id?: unknown; method?: string; params?: PaymeParams };
 type RpcResponse = { jsonrpc: '2.0'; id: unknown; result?: unknown; error?: { code: number; message: unknown; data?: string } };
 
 @Injectable()
@@ -78,7 +114,7 @@ export class PaymeProvider implements PaymentProvider {
         return response;
     }
 
-    private dispatch(id: unknown, method: string, p: Record<string, any>): Promise<RpcResponse> {
+    private dispatch(id: unknown, method: string, p: PaymeParams): Promise<RpcResponse> {
         switch (method) {
             case 'CheckPerformTransaction': return this.checkPerform(id, p);
             case 'CreateTransaction': return this.create(id, p);
@@ -90,8 +126,8 @@ export class PaymeProvider implements PaymentProvider {
         }
     }
 
-    private async checkPerform(id: unknown, p: Record<string, any>): Promise<RpcResponse> {
-        const payment = await this.payments.findByMerchantRef(this.kind, p.account?.payment_id);
+    private async checkPerform(id: unknown, p: PaymeParams): Promise<RpcResponse> {
+        const payment = await this.payments.findByMerchantRef(this.kind, asRef(p.account?.payment_id));
         if (!payment) return this.error(id, PAYME.ORDER_NOT_FOUND, 'payment_id');
         if (payment.status !== PaymentStatus.CREATED && payment.status !== PaymentStatus.PREPARED) {
             return this.error(id, PAYME.ORDER_NOT_AVAILABLE, 'payment_id');
@@ -103,8 +139,8 @@ export class PaymeProvider implements PaymentProvider {
         return this.result(id, result);
     }
 
-    private async create(id: unknown, p: Record<string, any>): Promise<RpcResponse> {
-        const txnId = String(p.id ?? '');
+    private async create(id: unknown, p: PaymeParams): Promise<RpcResponse> {
+        const txnId = (asRef(p.id) ?? '');
         if (!txnId) return this.error(id, PAYME.BAD_REQUEST);
         const existing = await this.payments.findByProviderTxn(this.kind, txnId);
         if (existing) {
@@ -116,7 +152,7 @@ export class PaymeProvider implements PaymentProvider {
             return this.createResult(id, existing);
         }
 
-        const payment = await this.payments.findByMerchantRef(this.kind, p.account?.payment_id);
+        const payment = await this.payments.findByMerchantRef(this.kind, asRef(p.account?.payment_id));
         if (!payment) return this.error(id, PAYME.ORDER_NOT_FOUND, 'payment_id');
         if (Number(p.amount) !== toTiyin(payment.amount)) return this.error(id, PAYME.BAD_AMOUNT);
         // Paid, cancelled, or already waiting on ANOTHER Payme transaction:
@@ -124,13 +160,13 @@ export class PaymeProvider implements PaymentProvider {
         if (payment.status !== PaymentStatus.CREATED) return this.error(id, PAYME.ORDER_NOT_AVAILABLE, 'payment_id');
 
         const createTime = Date.now();
-        const prepared = await this.payments.markPrepared(this.kind, payment, txnId, { payme_id: txnId, payme_time: p.time }, createTime);
+        const prepared = await this.payments.markPrepared(this.kind, payment, txnId, { payme_id: txnId, payme_time: Number(p.time) }, createTime);
         if (!prepared) return this.error(id, PAYME.ORDER_NOT_AVAILABLE, 'payment_id');
         return this.createResult(id, { ...payment, providerCreateTime: String(createTime) });
     }
 
-    private async perform(id: unknown, p: Record<string, any>): Promise<RpcResponse> {
-        const payment = await this.payments.findByProviderTxn(this.kind, String(p.id ?? ''));
+    private async perform(id: unknown, p: PaymeParams): Promise<RpcResponse> {
+        const payment = await this.payments.findByProviderTxn(this.kind, (asRef(p.id) ?? ''));
         if (!payment) return this.error(id, PAYME.TXN_NOT_FOUND);
         if (payment.status === PaymentStatus.PAID) return this.performResult(id, payment);
         if (payment.status === PaymentStatus.CANCELLED) return this.error(id, PAYME.CANNOT_PERFORM);
@@ -153,10 +189,10 @@ export class PaymeProvider implements PaymentProvider {
         return this.performResult(id, fresh);
     }
 
-    private async cancelTxn(id: unknown, p: Record<string, any>): Promise<RpcResponse> {
-        const payment = await this.payments.findByProviderTxn(this.kind, String(p.id ?? ''));
+    private async cancelTxn(id: unknown, p: PaymeParams): Promise<RpcResponse> {
+        const payment = await this.payments.findByProviderTxn(this.kind, (asRef(p.id) ?? ''));
         if (!payment) return this.error(id, PAYME.TXN_NOT_FOUND);
-        const reason = String(p.reason ?? '');
+        const reason = (asRef(p.reason) ?? '');
         const cancelTime = Date.now();
 
         if (payment.status === PaymentStatus.CANCELLED) return this.cancelResult(id, payment);
@@ -181,18 +217,18 @@ export class PaymeProvider implements PaymentProvider {
         return this.cancelResult(id, fresh ?? payment);
     }
 
-    private async check(id: unknown, p: Record<string, any>): Promise<RpcResponse> {
-        const payment = await this.payments.findByProviderTxn(this.kind, String(p.id ?? ''));
+    private async check(id: unknown, p: PaymeParams): Promise<RpcResponse> {
+        const payment = await this.payments.findByProviderTxn(this.kind, (asRef(p.id) ?? ''));
         if (!payment) return this.error(id, PAYME.TXN_NOT_FOUND);
         return this.result(id, this.statusOf(payment));
     }
 
-    private async statement(id: unknown, p: Record<string, any>): Promise<RpcResponse> {
+    private async statement(id: unknown, p: PaymeParams): Promise<RpcResponse> {
         const list = await this.payments.listByCreateTime(this.kind, Number(p.from), Number(p.to));
         return this.result(id, {
             transactions: list.map((x) => ({
                 id: x.providerTxnId,
-                time: Number((x.providerPayload as any)?.payme_time ?? x.providerCreateTime),
+                time: Number((x.providerPayload as PaymePayload | null)?.payme_time ?? x.providerCreateTime),
                 amount: toTiyin(x.amount),
                 account: { payment_id: x.id },
                 ...this.statusOf(x),

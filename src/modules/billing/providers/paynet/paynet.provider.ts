@@ -76,7 +76,37 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const ACCOUNT_NO_RE = /^[1-9]\d{0,9}$/;
 const TXN_ID_RE = /^[1-9]\d{0,18}$/;
 
-type Params = Record<string, any>;
+/**
+ * Paynet's JSON-RPC params, across every method it calls.
+ *
+ * `unknown` rather than `any`, and narrowed where each one is read: this is a
+ * body from outside, so the type describes what MIGHT arrive, not what we
+ * hope did. A DTO class is not an option — the global ValidationPipe runs
+ * `forbidNonWhitelisted` and would reject Paynet's own extra fields.
+ *
+ *   GetInformation    serviceId, fields
+ *   PerformTransaction serviceId, amount, transactionId, fields
+ *   CheckTransaction  transactionId
+ *   CancelTransaction transactionId
+ *   GetStatement      dateFrom, dateTo
+ */
+interface Params {
+    id?: unknown;
+    jsonrpc?: unknown;
+    method?: unknown;
+    params?: unknown;
+    serviceId?: unknown;
+    amount?: unknown;
+    transactionId?: unknown;
+    dateFrom?: unknown;
+    dateTo?: unknown;
+    paynet?: unknown;
+    /** The account form: field name → whatever the payer typed. */
+    fields?: Record<string, unknown>;
+}
+
+/** The account fields, as `findPayer` reads them. */
+type PaynetFields = Record<string, unknown>;
 type RpcResponse = { jsonrpc: '2.0'; id: unknown; result?: unknown; error?: { code: number; message: string } };
 export type PaynetReply = { httpStatus: number, body: RpcResponse };
 
@@ -159,7 +189,7 @@ export class PaynetProvider {
         }
         if (!this.serviceOk(p.serviceId)) return this.error(id, PAYNET.SERVICE_NOT_FOUND);
 
-        const found = await this.findPayer(p.fields);
+        const found = await this.findPayer(p.fields ?? {});
         if (typeof found === 'number') return this.error(id, found);
 
         const balance = await this.wallet.getBalance(this.users.manager, found.id);
@@ -187,17 +217,17 @@ export class PaynetProvider {
         // A retry of a transaction we already hold: say so, Paynet then asks CheckTransaction.
         if (await this.payments.findByProviderTxn(this.kind, txnId)) return this.error(id, PAYNET.TXN_EXISTS);
 
-        const found = await this.findPayer(p.fields);
+        const found = await this.findPayer(p.fields ?? {});
         if (typeof found === 'number') return this.error(id, found);
 
-        const payment = await this.payments.recordPushPayment(this.kind, found.id, amountTiyin, txnId, { transactionId: txnId, fields: p.fields }, this.fiscalStatus());
+        const payment = await this.payments.recordPushPayment(this.kind, found.id, amountTiyin, txnId, { transactionId: txnId, fields: p.fields ?? {} }, this.fiscalStatus());
         // null = a concurrent call with the same transactionId won the insert.
         if (!payment) return this.error(id, PAYNET.TXN_EXISTS);
 
         return this.result(id, {
             providerTrnId: payment.prepareId,
             timestamp: toPaynetTime(payment.paidAt ?? Date.now()),
-            fields: p.fields
+            fields: p.fields ?? {}
         })
 
     }
@@ -282,10 +312,14 @@ export class PaynetProvider {
         }
     }
 
-    private async findPayer(fields: Params): Promise<User | number> {
+    private async findPayer(fields: PaynetFields): Promise<User | number> {
         const raw = fields[this.config.get<string>('PAYNET_ACCOUNT_FIELD') ?? 'client_id'];
-        if (raw === undefined || raw === null || raw === '') return PAYNET.MISSING_FIELDS;
+        // Only a string or a number is an account reference. Anything else —
+        // an object, an array — is a malformed request, not something to
+        // stringify into "[object Object]" and then fail to find.
+        if (typeof raw !== 'string' && typeof raw !== 'number') return PAYNET.MISSING_FIELDS;
         const ref = String(raw).trim();
+        if (!ref) return PAYNET.MISSING_FIELDS;
 
         let user: User | null = null;
         if (ACCOUNT_NO_RE.test(ref)) user = await this.users.findOne({ where: { accountNo: Number(ref) } });
