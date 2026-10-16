@@ -134,6 +134,53 @@ export class BillingAdminService {
 
     // ─── payments ─────────────────────────────────────────────────────────
 
+    /**
+     * One payment, in full — including the money it actually moved.
+     *
+     * The list deliberately carries only what a table row needs; the raw
+     * provider payload and the fiscal response are jsonb and would be fetched
+     * twenty at a time for nothing. More importantly this joins the ledger
+     * rows the payment produced, which is the question behind almost every
+     * support ticket: "it says PAID, so where is the balance?" A PAID payment
+     * with no TOPUP row beside it is the bug; the two together are proof.
+     */
+    async paymentDetail(id: string) {
+        const payment = await this.payments.findOne({ where: { id } });
+        if (!payment) {
+            throw new NotFoundException({ code: 'PAYMENT_NOT_FOUND', message: 'Payment not found' });
+        }
+
+        // Through the repository, not raw SQL: `query` hands back `any`, so
+        // each of the three fields below would be an unchecked member access.
+        const user = await this.dataSource.manager.findOne(User, {
+            where: { id: payment.userId },
+            select: { name: true, surname: true, phoneNumber: true },
+        });
+
+        const ledger = await this.dataSource.manager.find(WalletTransaction, {
+            where: { referenceId: id },
+            order: { createdAt: 'ASC' },
+            select: {
+                id: true, kind: true, amount: true, balanceAfter: true,
+                note: true, createdAt: true,
+            },
+        });
+
+        return {
+            ...payment,
+            userName: user?.name ?? null,
+            userSurname: user?.surname ?? null,
+            userPhone: user?.phoneNumber ?? null,
+            // Credited = what reached the wallet. It should equal
+            // amount + bonusAmount for a PAID payment, and the dashboard says
+            // so out loud when it does not.
+            credited: ledger
+                .reduce((sum, t) => sum + Number(t.amount), 0)
+                .toFixed(2),
+            ledger,
+        };
+    }
+
     async listPayments(
         status: PaymentStatus | undefined, provider: PaymentProviderKind | undefined, limit: number, offset: number,
     ) {

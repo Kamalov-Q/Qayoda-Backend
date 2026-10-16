@@ -52,6 +52,11 @@ export class BillingAdminController {
     @Get('wallets')
     listWallets(@Query() q: PageQueryDto) { return this.admin.listWallets(q.limit, q.offset); }
 
+    @Get('payments/:id')
+    paymentDetail(@Param('id', ParseUUIDPipe) id: string) {
+        return this.admin.paymentDetail(id);
+    }
+
     @Post('wallets/:userId/adjust')
     adjust(@CurrentUser() admin: AuthUser, @Param('userId', ParseUUIDPipe) userId: string, @Body() dto: AdjustWalletDto) {
         return this.admin.adjustWallet(admin.sub, userId, dto);
