@@ -26,10 +26,12 @@ import { CommentsModule } from './modules/comments/comments.module';
 import { ViewsModule } from './modules/views/views.module';
 import { SupportModule } from './modules/support/support.module';
 import { BlocksModule } from './modules/blocks/blocks.module';
+import { HealthModule } from './modules/health/health.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    HealthModule,
     TypeOrmModule.forRootAsync({ useFactory: typeOrmConfig }),
     ThrottlerModule.forRoot(throttlerConfig),
     EventsModule,
