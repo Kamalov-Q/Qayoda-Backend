@@ -16,7 +16,10 @@ import { AuthProvider, UserStatus } from 'src/shared/enums';
 import { User } from 'src/modules/users/entities/user.entity';
 import { PhoneOtpCode } from '../entities/phone-otp-code.entity';
 import { AuthIdentity } from '../entities/auth-identity.entity';
-import { EskizService } from '../../notifications/eskiz.service';
+import {
+  EskizService,
+  type OtpPurpose,
+} from '../../notifications/eskiz.service';
 import { IdentityService } from './identity.service';
 import { TokenService } from './token.service';
 import { JwtAccessGuard } from '../guards/jwt-access.guard';
@@ -40,7 +43,19 @@ export class PhoneAuthService {
     private readonly eskiz: EskizService,
   ) {}
 
-  async requestOtp(rawPhone: string, lang: 'uz' | 'ru' = 'uz') {
+  /**
+   * `purpose` only picks which moderated SMS text goes out — the code itself,
+   * its TTL, the budget and the attempt counter are shared. A code is NOT
+   * bound to the purpose it was requested for: one sent for a reset still
+   * signs in, which is what lets the reset screen reuse an SMS the user
+   * already has, and costs nothing extra in reach — holding the phone is
+   * what either flow proves.
+   */
+  async requestOtp(
+    rawPhone: string,
+    lang: 'uz' | 'ru' = 'uz',
+    purpose: OtpPurpose = 'login',
+  ) {
     const phone = EskizService.normalizePhone(rawPhone);
 
     // Every SMS costs money, so these limits protect the balance as much as
@@ -98,7 +113,12 @@ export class PhoneAuthService {
       [`+${phone}`],
     );
 
-    await this.eskiz.sendOtp(phone, code, lang ?? existing?.language ?? 'uz');
+    await this.eskiz.sendOtp(
+      phone,
+      code,
+      lang ?? existing?.language ?? 'uz',
+      purpose,
+    );
 
     return { sent: true, expiresIn: OTP_TTL_MS / 1000 };
   }

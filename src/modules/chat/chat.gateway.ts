@@ -124,16 +124,19 @@ export class ChatGateway
     payload: { userId: string; online: boolean; lastSeenAt: Date | null },
   ) {
     const counterpartIds = await this.conversations.findCounterpartIds(userId);
+    // Only the ones with a socket open can receive anything, so the block
+    // check is asked about them alone.
+    const online = counterpartIds.filter((id) => this.sockets.has(id));
+    if (online.length === 0) return;
 
-    for (const id of counterpartIds) {
-      if (!this.sockets.has(id)) continue;
+    // Presence is the first thing a block has to stop leaking: "last seen" is
+    // exactly the detail people block someone to withhold. One query for the
+    // whole set rather than one per recipient — this ran on every connect and
+    // disconnect, which on a phone is every time the network blinks.
+    const blocked = await this.blocks.blockedAmong(userId, online);
 
-      // Presence is the first thing a block has to stop leaking: "last seen"
-      // is exactly the detail people block someone to withhold. Checked per
-      // recipient rather than once, because the block may be in either
-      // direction and only concerns that one pair.
-      if (await this.blocks.betweenAny(userId, id)) continue;
-
+    for (const id of online) {
+      if (blocked.has(id)) continue;
       this.server.to(`user:${id}`).emit('presence', payload);
     }
   }

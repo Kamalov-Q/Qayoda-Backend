@@ -57,6 +57,8 @@ export class AuthController {
     description: [
       'Sends a 6-digit code, valid for 5 minutes. The same endpoint covers sign-up and sign-in — whether the number is already known is not revealed.',
       '',
+      'Also sends the forgot-password code: pass `purpose: "reset"` for the recovery wording. The code works the same in both flows.',
+      '',
       'Limits: this per-IP one, plus a 60-second resend cooldown and 5 codes per hour on the number itself.',
     ].join('\n'),
   })
@@ -64,7 +66,7 @@ export class AuthController {
   @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
   @HttpCode(200)
   requestOtp(@Body() dto: RequestOtpDto) {
-    return this.phone.requestOtp(dto.phone, dto.lang);
+    return this.phone.requestOtp(dto.phone, dto.lang, dto.purpose);
   }
 
   @ApiOperation({
@@ -114,21 +116,24 @@ export class AuthController {
 
   @ApiOperation({
     summary: 'Set or change the password',
-    description:
+    description: [
       'For the signed-in account. Asked right after onboarding; afterwards `POST /auth/phone/login` signs in without an SMS.',
+      '',
+      'Changing an existing password requires `currentPassword` (401 `CURRENT_PASSWORD_WRONG` without it). Forgotten passwords go through `POST /auth/password/reset` instead.',
+    ].join('\n'),
   })
   @ApiBearerAuth('access-token')
   @Post('password')
   @UseGuards(JwtAccessGuard)
   @HttpCode(200)
   setPassword(@CurrentUser() user: AuthUser, @Body() dto: SetPasswordDto) {
-    return this.phone.setPassword(user.sub, dto.password);
+    return this.phone.setPassword(user.sub, dto.password, dto.currentPassword);
   }
 
   @ApiOperation({
     summary: 'Reset the password with an SMS code',
     description: [
-      'Request a code with `POST /auth/phone/request` first. The code proves phone ownership, the password is replaced, every refresh token is revoked, and a fresh session is returned.',
+      'Request a code with `POST /auth/phone/request` (`purpose: "reset"`) first. The code proves phone ownership, the password is replaced, every refresh token is revoked, and a fresh session is returned.',
       '',
       '`ACCOUNT_NOT_FOUND` (404) can only surface after a valid code, so it leaks nothing to guessers.',
     ].join('\n'),

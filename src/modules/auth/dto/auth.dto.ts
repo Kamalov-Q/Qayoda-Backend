@@ -38,6 +38,18 @@ export class RequestOtpDto extends LocalizedDto {
   @Transform(stripSeparators)
   @Matches(PHONE, { message: PHONE_MESSAGE })
   phone: string;
+
+  @ApiPropertyOptional({
+    enum: ['login', 'reset'],
+    default: 'login',
+    description:
+      'Which SMS text to send. `reset` is the forgot-password wording — ' +
+      'send it whenever the code is headed for `POST /auth/password/reset`, ' +
+      'resends included. The code itself is identical either way.',
+  })
+  @IsOptional()
+  @IsIn(['login', 'reset'])
+  purpose?: 'login' | 'reset';
 }
 
 export class VerifyOtpDto extends LocalizedDto {

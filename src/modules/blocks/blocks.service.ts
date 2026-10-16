@@ -101,6 +101,31 @@ export class BlocksService {
   }
 
   /**
+   * The same question asked about many people at once.
+   *
+   * `betweenAny` in a loop was one query per recipient on every socket
+   * connect and disconnect — and a phone reconnects constantly, so a user
+   * with thirty online chat partners paid thirty round trips each time their
+   * network blinked. One query answers for all of them.
+   *
+   * Returns only the ids that ARE blocked, in either direction, so the
+   * caller filters in memory.
+   */
+  async blockedAmong(userId: string, others: string[]): Promise<Set<string>> {
+    if (others.length === 0) return new Set();
+
+    const rows: { other: string }[] = await this.blocks.manager.query(
+      `SELECT CASE WHEN blocker_id = $1 THEN blocked_id ELSE blocker_id END AS other
+         FROM user_blocks
+        WHERE (blocker_id = $1 AND blocked_id = ANY($2::uuid[]))
+           OR (blocked_id = $1 AND blocker_id = ANY($2::uuid[]))`,
+      [userId, others],
+    );
+
+    return new Set(rows.map((r) => r.other));
+  }
+
+  /**
    * Refuse when either side has blocked the other.
    *
    * Deliberately the same error whichever way round it is. Telling someone

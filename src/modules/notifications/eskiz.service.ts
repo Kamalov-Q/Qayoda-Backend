@@ -33,29 +33,45 @@ interface EskizLimitResponse {
 type Lang = 'uz' | 'ru';
 
 /**
- * Current texts. Each needs its own approval in my.eskiz.uz → СМС → Мои тексты
- * before Eskiz will deliver it — submit both, exactly as written here.
+ * What the code is for. Signing in and recovering a lost password are
+ * separate moderated texts at Eskiz, and the wording is the only thing that
+ * tells the reader which one they asked for — a "kirish uchun" code arriving
+ * when you pressed "forgot password" reads like someone else is signing in.
  */
-const OTP_TEMPLATES: Record<Lang, (code: string) => string> = {
-  uz: (code) =>
-    `Growen City mobil ilovasiga kirish uchun tasdiqlash kodi: ${code}. Kodni hech kimga bermang.`,
-  // Cyrillic is UCS-2 regardless, so this must stay within 70 characters:
-  // it is exactly 70 with the 6-digit code — don't add a word.
-  ru: (code) =>
-    `Код подтверждения для входа в мобильное приложение Growen City: ${code}`,
-};
+export type OtpPurpose = 'login' | 'reset';
 
 /**
- * The texts Eskiz already approved, under the old brand. Used only when Eskiz
- * rejects a current text as not yet moderated, so a pending approval never
- * locks people out of logging in. Delete once both new texts are approved.
+ * Copied character for character from the approved rows in my.eskiz.uz →
+ * СМС → Мои тексты. Eskiz matches the text it is sent against the
+ * moderated one: a single extra word — "mobil", "мобильное" — makes it an
+ * unmoderated text and the send is refused. Change a word here only together
+ * with a new approval there.
+ *
+ * Character counts are with a 6-digit code. Latin is GSM-7 (160 per SMS);
+ * Cyrillic is UCS-2 (70 per SMS), so both Russian texts cost two — as
+ * moderated, and not something a shorter wording here may "fix".
  */
-const LEGACY_OTP_TEMPLATES: Record<Lang, (code: string) => string> = {
-  uz: (code) =>
-    `UyNest mobil ilovasiga kirish uchun tasdiqlash kodi: ${code}. Kodni hech kimga bermang.`,
-  ru: (code) =>
-    `Код подтверждения для входа в мобильное приложение UyNest: ${code}`,
-};
+const OTP_TEMPLATES: Record<OtpPurpose, Record<Lang, (code: string) => string>> =
+  {
+    // Rows 95587 (uz) and 95588 (ru).
+    login: {
+      // 85 characters — one SMS.
+      uz: (code) =>
+        `Growen City ilovasiga kirish uchun tasdiqlash kodi: ${code}. Kodni hech kimga bermang.`,
+      // 91 characters — two SMS.
+      ru: (code) =>
+        `Код подтверждения для входа в приложение Growen City: ${code}. Никому не сообщайте этот код.`,
+    },
+    // Rows 95589 (uz) and 95590 (ru).
+    reset: {
+      // 77 characters — one SMS.
+      uz: (code) =>
+        `Growen City ilovasida parolni tiklash kodi: ${code}. Kodni hech kimga bermang.`,
+      // 85 characters — two SMS.
+      ru: (code) =>
+        `Код для сброса пароля в приложении Growen City: ${code}. Никому не сообщайте этот код.`,
+    },
+  };
 
 /** Eskiz's refusal for a text that has not passed moderation. */
 class TemplateNotApprovedError extends Error {}
@@ -184,7 +200,7 @@ export class EskizService {
       const detail = this.describe(e);
       if (isModerationRefusal(detail)) {
         // Not an outage: this exact text isn't approved yet. Surfaced as its
-        // own type so sendOtp can fall back to an approved one.
+        // own type so sendOtp can log what to fix instead of "SMS failed".
         throw new TemplateNotApprovedError(detail);
       }
       this.logger.error(`SMS to ${this.mask(mobile)} failed: ${detail}`);
@@ -195,30 +211,28 @@ export class EskizService {
     }
   }
 
-  async sendOtp(phone: string, code: string, lang: Lang = 'uz'): Promise<void> {
+  async sendOtp(
+    phone: string,
+    code: string,
+    lang: Lang = 'uz',
+    purpose: OtpPurpose = 'login',
+  ): Promise<void> {
     try {
-      await this.send(phone, OTP_TEMPLATES[lang](code));
+      await this.send(phone, OTP_TEMPLATES[purpose][lang](code));
     } catch (e) {
       if (!(e instanceof TemplateNotApprovedError)) throw e;
-      // The rebranded text is still waiting for Eskiz moderation. Log it so
-      // the pending approval is visible, and log people in with the text that
-      // is already approved rather than failing the login.
-      this.logger.warn(
-        `OTP text (${lang}) not approved by Eskiz yet — sent the legacy text. ` +
-          'Approve the new one in my.eskiz.uz → СМС → Мои тексты.',
+      // There is no second text to fall back to: sending a different one
+      // would deliver a code under a brand name nobody recognises. The text
+      // above has drifted from the moderated one — fix it, don't paper over it.
+      this.logger.error(
+        `OTP text (${purpose}/${lang}) rejected as unmoderated by Eskiz: ` +
+          `${e.message}. It must match the approved row in ` +
+          'my.eskiz.uz → СМС → Мои тексты exactly.',
       );
-      try {
-        await this.send(phone, LEGACY_OTP_TEMPLATES[lang](code));
-      } catch (legacy) {
-        if (legacy instanceof TemplateNotApprovedError) {
-          this.logger.error(`No approved OTP text for ${lang}: ${legacy.message}`);
-          throw new ServiceUnavailableException({
-            code: 'SMS_SEND_FAILED',
-            message: "SMS couldn't be sent",
-          });
-        }
-        throw legacy;
-      }
+      throw new ServiceUnavailableException({
+        code: 'SMS_SEND_FAILED',
+        message: "SMS couldn't be sent",
+      });
     }
   }
 
