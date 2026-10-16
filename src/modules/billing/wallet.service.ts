@@ -1,4 +1,4 @@
-import { BadRequestException, HttpException, HttpStatus, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, HttpException, HttpStatus, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { Wallet } from "./entities/wallet.entity";
@@ -12,6 +12,11 @@ import { UserRole } from "src/shared/enums";
 
 @Injectable()
 export class WalletService {
+    /** TEMPORARY TRACE — remove once paid actions are confirmed in production.
+     *  Every charge passes through chargeTariff/debit, so one logger here
+     *  covers listing posts, story posts and TOP without touching callers. */
+    private readonly log = new Logger('Billing');
+
     constructor(
         private readonly dataSource: DataSource,
         @InjectRepository(Wallet) private readonly wallets: Repository<Wallet>,
@@ -136,11 +141,24 @@ export class WalletService {
     /** Debit one specific tariff's price. Free for admins and for a zero price. */
     async chargeTariff(manager: EntityManager, userId: string, tariff: Tariff, referenceId?: string): Promise<void> {
         const user = await manager.findOne(User, { where: { id: userId }, select: { id: true, role: true } });
-        if (user?.role === UserRole.ADMIN) return;
+        if (user?.role === UserRole.ADMIN) {
+            this.log.warn(
+                `SKIPPED ${tariff.action} for ${userId}: account is ADMIN, so nothing is charged. ` +
+                `Test a paid action from a non-admin account.`,
+            );
+            return;
+        }
 
         const priceTiyin = toTiyin(tariff.price);
-        if (priceTiyin <= 0) return;
+        if (priceTiyin <= 0) {
+            this.log.log(`SKIPPED ${tariff.action} for ${userId}: price is ${tariff.price} (free)`);
+            return;
+        }
 
+        this.log.log(
+            `CHARGE ${tariff.action} ${tariff.price} to ${userId}` +
+            `${referenceId ? ` ref=${referenceId}` : ''} tariff=${tariff.id}`,
+        );
         await this.debit(manager, userId, priceTiyin, tariff.action as unknown as TxKind, referenceId ?? null, tariff.nameUz);
     }
 
@@ -170,6 +188,7 @@ export class WalletService {
 
         if (rows.length === 0) {
             const balance = await this.getBalance(manager, userId);
+            this.log.warn(`REFUSED ${kind} ${amount} for ${userId}: balance is ${balance}`);
             throw new HttpException({ code: 'INSUFFICIENT_FUNDS', message: `Need ${amount} so'm, balance is ${balance}`, required: amount, balance },
                 HttpStatus.PAYMENT_REQUIRED);
         }
@@ -177,6 +196,10 @@ export class WalletService {
         await manager.insert(WalletTransaction, {
             userId, amount: fromTiyin(-amountTiyin), kind, referenceId, balanceAfter: rows[0].balance, note
         });
+        // NOTE: still inside the caller's transaction. A later failure rolls
+        // this back, so a DEBITED line is not yet proof the money moved —
+        // the wallet_transactions row is.
+        this.log.log(`DEBITED ${kind} ${amount} from ${userId}, balance now ${rows[0].balance}`);
         return rows[0].balance;
 
     }
