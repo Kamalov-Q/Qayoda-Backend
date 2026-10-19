@@ -6,6 +6,7 @@ import {
   Param,
   ParseUUIDPipe,
   Patch,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -16,6 +17,7 @@ import type { AuthUser } from '../auth/types/auth-user.type';
 import { Roles, RolesGuard } from '../../shared/guards/roles.guard';
 import { UserRole } from '../../shared/enums';
 import { UpdateListingDto } from '../listings/dto/update-listing.dto';
+import { UpdateImagesDto } from '../listings/dto/update-images.dto';
 import { AdminService } from './admin.service';
 import { AdminListingsQueryDto, AdminUsersQueryDto } from './dto/admin-query.dto';
 import {
@@ -120,6 +122,19 @@ export class AdminController {
     @Body() dto: UpdateListingDto,
   ) {
     return this.admin.updateListing(id, dto);
+  }
+
+  @ApiOperation({
+    summary: 'Replace the listing photos',
+    description:
+      'The full set, in order, with one `isPrimary`. New photos are uploaded first with POST /media/upload; photos left out are deleted from the CDN.',
+  })
+  @Put('listings/:id/images')
+  updateListingImages(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateImagesDto,
+  ) {
+    return this.admin.updateListingImages(id, dto);
   }
 
   @ApiOperation({

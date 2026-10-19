@@ -11,6 +11,7 @@ import { ListingImage } from '../listings/entities/listing-image.entity';
 import { ListingStatus } from '../listings/enums/listing-status.enum';
 import { ListingsFacade } from '../listings/listings.facade';
 import { UpdateListingDto } from '../listings/dto/update-listing.dto';
+import { UpdateImagesDto } from '../listings/dto/update-images.dto';
 import { TokenService } from '../auth/services/token.service';
 import { ReportsService } from '../reports/reports.service';
 import { ChatReportsService } from '../reports/chat-reports.service';
@@ -389,6 +390,16 @@ export class AdminService {
   /** Field edits, validated by the same DTO the owner's app uses. */
   async updateListing(id: string, dto: UpdateListingDto) {
     await this.listingsFacade.updateById(id, dto);
+    return this.getListing(id);
+  }
+
+  /**
+   * Replaces the photo set: removed, reordered, a new cover, or photos the
+   * admin uploaded through POST /media/upload. Files dropped from the set are
+   * cleaned off the CDN by the same orphan job the owner's edit triggers.
+   */
+  async updateListingImages(id: string, dto: UpdateImagesDto) {
+    await this.listingsFacade.updateImagesById(id, dto);
     return this.getListing(id);
   }
 

@@ -4,6 +4,7 @@ import {
   ListingsService,
   type OwnerListingsQuery,
 } from './listings.service';
+import { UpdateImagesDto } from './dto/update-images.dto';
 import { UpdateListingDto } from './dto/update-listing.dto';
 
 @Injectable()
@@ -67,6 +68,11 @@ export class ListingsFacade {
 
   async updateById(listingId: string, dto: UpdateListingDto) {
     return this.listingsService.update(await this.mustGet(listingId), dto);
+  }
+
+  /** The owner's photo replace, on any listing — the admin dashboard's. */
+  async updateImagesById(listingId: string, dto: UpdateImagesDto) {
+    return this.listingsService.updateImages(await this.mustGet(listingId), dto);
   }
 
   private async mustGet(listingId: string) {
