@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 
 export interface FiscalLine {
@@ -16,22 +16,46 @@ export interface FiscalLine {
 
 @Injectable()
 export class FiscalService {
+    private readonly logger = new Logger(FiscalService.name);
+
     constructor(
         private readonly config: ConfigService
-    ) { }
+    ) {
+        // Read once, at boot, so a typo is a line in the startup log rather
+        // than a surprise during somebody's payment.
+        if (this.enabled && this.vatPercent === null) {
+            this.logger.error(
+                'FISCAL_VAT_PERCENT must be a number 0..100 — fiscalisation is OFF until it is fixed. ' +
+                'Payments still work; no receipts are sent.',
+            );
+        }
+    }
 
     /**
      * Every value a receipt needs. All-or-nothing: with any of them missing
      * no receipt is attempted, rather than one throwing halfway through a
      * payment callback.
+     *
+     * VAT is part of that check. It is read inside Payme's
+     * CheckPerformTransaction, and a malformed one used to throw there —
+     * turning a config typo into a failed webhook instead of a skipped
+     * receipt.
      */
     get enabled(): boolean {
-        return ['FISCAL_MXIK', 'FISCAL_PACKAGE_CODE', 'FISCAL_TIN'].every((k) => !!this.config.get<string>(k)?.trim());
+        return ['FISCAL_MXIK', 'FISCAL_PACKAGE_CODE', 'FISCAL_TIN'].every((k) => !!this.config.get<string>(k)?.trim())
+            && this.vatPercent !== null;
+    }
+
+    /** The configured VAT rate, or null when it is not a usable number. */
+    private get vatPercent(): number | null {
+        const raw = this.config.get<string>('FISCAL_VAT_PERCENT')?.trim();
+        const n = Number(raw || 0);
+        return Number.isFinite(n) && n >= 0 && n <= 100 ? n : null;
     }
 
     topupLine(amountTiyin: number): FiscalLine {
-        const vatPercent = Number(this.config.get<string>('FISCAL_VAT_PERCENT') || 0);
-        if (!Number.isFinite(vatPercent) || vatPercent < 0 || vatPercent > 100) {
+        const vatPercent = this.vatPercent;
+        if (vatPercent === null) {
             throw new Error(`FISCAL_VAT_PERCENT must be 0..100, got "${this.config.get('FISCAL_VAT_PERCENT')}"`);
         }
 

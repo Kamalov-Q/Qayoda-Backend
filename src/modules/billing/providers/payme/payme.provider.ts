@@ -142,6 +142,13 @@ export class PaymeProvider implements PaymentProvider {
     private async create(id: unknown, p: PaymeParams): Promise<RpcResponse> {
         const txnId = (asRef(p.id) ?? '');
         if (!txnId) return this.error(id, PAYME.BAD_REQUEST);
+        // Payme stamps the transaction with ITS clock and expects us to refuse
+        // one that was already too old when it arrived — the alternative is
+        // opening a transaction that our own 12-hour window would then keep
+        // alive long past the one Payme is measuring.
+        const paymeTime = Number(p.time);
+        if (!Number.isFinite(paymeTime) || paymeTime <= 0) return this.error(id, PAYME.BAD_REQUEST);
+        if (Date.now() - paymeTime > PAYME_TIMEOUT_MS) return this.error(id, PAYME.CANNOT_PERFORM);
         const existing = await this.payments.findByProviderTxn(this.kind, txnId);
         if (existing) {
             if (existing.status !== PaymentStatus.PREPARED) return this.error(id, PAYME.CANNOT_PERFORM);
@@ -224,7 +231,14 @@ export class PaymeProvider implements PaymentProvider {
     }
 
     private async statement(id: unknown, p: PaymeParams): Promise<RpcResponse> {
-        const list = await this.payments.listByCreateTime(this.kind, Number(p.from), Number(p.to));
+        // Unchecked, a missing or non-numeric bound reaches the query as NaN,
+        // which Postgres rejects mid-statement — a 500 where Payme's own
+        // reconciliation expects a protocol error it can act on.
+        const from = Number(p.from);
+        const to = Number(p.to);
+        if (!Number.isFinite(from) || !Number.isFinite(to) || to < from) return this.error(id, PAYME.BAD_REQUEST);
+
+        const list = await this.payments.listByCreateTime(this.kind, from, to);
         return this.result(id, {
             transactions: list.map((x) => ({
                 id: x.providerTxnId,
