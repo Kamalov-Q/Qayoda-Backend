@@ -196,7 +196,12 @@ export class PaynetProvider {
         return this.result(id, {
             status: 0,
             timestamp: toPaynetTime(Date.now()),
-            fields: { name: maskName(found), balance: toTiyin(balance) }
+            // So'm here, NOT tiyin — confirmed by Paynet. `fields` is what the
+            // payer is shown before paying, so it carries the figure a person
+            // reads; `amount` on PerformTransaction stays tiyin, which is the
+            // machine side of the same protocol. The two units sitting next to
+            // each other is exactly why this says so out loud.
+            fields: { name: maskName(found), balance: Number(balance) }
         })
     }
 
