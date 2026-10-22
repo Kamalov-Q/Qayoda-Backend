@@ -50,8 +50,20 @@ const MSG: Record<number, string> = {
 // transactionState in CheckTransaction / CancelTransaction
 export const PAYNET_STATE = { SUCCESS: 1, CANCELLED: 2, NOT_FOUND: 3 } as const;
 
-/** Contract §4.2: Paynet calls only from these networks. */
-const DEFAULT_ALLOWED_IPS = '213.230.106.112/28,213.230.65.80/28';
+/**
+ * The hosts Paynet calls us from, confirmed by their operations team on
+ * 2026-10-22. This supersedes the two networks in contract §4.2
+ * (213.230.106.112/28, 213.230.65.80/28) — add those back only if a call
+ * shows up refused from one of them.
+ *
+ * Their two certification hosts (95.214.211.143, 195.158.21.42) are NOT here
+ * on purpose: put them in PAYNET_ALLOWED_IPS while certifying, so they drop
+ * away by themselves afterwards instead of living in the production default.
+ */
+const DEFAULT_ALLOWED_IPS = [
+    '109.207.244.62', '62.209.139.94', '109.207.244.94',
+    '89.236.220.222', '91.196.76.52', '94.158.63.240',
+].join(',');
 
 /** Every Paynet timestamp is "YYYY-MM-DD HH:mm:ss" in Tashkent time (GMT+5, no DST). */
 const TZ_OFFSET_MS = 5 * 3_600_000;
@@ -128,7 +140,10 @@ export class PaynetProvider {
     }
 
     get enabled(): boolean {
-        return !!(this.config.get('PAYNET_SERVICE_ID') && this.config.get('PAYNET_USERNAME') && this.config.get('PAYNET_PASSWORD'));
+        // MERCHANT_ID is in here because payUrl getOrThrow's it: without it,
+        // offering Paynet in the app would mean a 500 on /wallet/paynet-link
+        // instead of simply not offering it.
+        return !!(this.config.get('PAYNET_SERVICE_ID') && this.config.get('PAYNET_USERNAME') && this.config.get('PAYNET_PASSWORD') && this.config.get('PAYNET_MERCHANT_ID'));
     }
 
     /** The link the app opens: Paynet's page with our service, the account and the amount (so'm) filled in. */
@@ -229,10 +244,19 @@ export class PaynetProvider {
         // null = a concurrent call with the same transactionId won the insert.
         if (!payment) return this.error(id, PAYNET.TXN_EXISTS);
 
+        // Read AFTER recordPushPayment has committed, so this is the balance
+        // the payer is left with — which is what Paynet prints on the
+        // terminal receipt, and what the technical annex marks as required.
+        //
+        // Tiyin here, unlike `fields.balance` on GetInformation, which Paynet
+        // asked for in so'm. Their own document specifies each one separately;
+        // do not "make them consistent".
+        const balanceTiyin = toTiyin(await this.wallet.getBalance(this.users.manager, found.id));
+
         return this.result(id, {
             providerTrnId: payment.prepareId,
             timestamp: toPaynetTime(payment.paidAt ?? Date.now()),
-            fields: p.fields ?? {}
+            fields: { ...(p.fields ?? {}), balance: balanceTiyin },
         })
 
     }
