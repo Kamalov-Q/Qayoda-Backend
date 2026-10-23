@@ -17,13 +17,14 @@ import { CategoriesModule } from './modules/categories/categories.module';
 import { AmenitiesModule } from './modules/amenities/amenities.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { ReportsModule } from './modules/reports/reports.module';
-import { StoriesModule } from './modules/stories/stories.module';
 import { VerificationModule } from './modules/verification/verification.module';
 import { LiveModule } from './modules/live/live.module';
 import { RatingModule } from './modules/rating/rating.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { CommentsModule } from './modules/comments/comments.module';
 import { ViewsModule } from './modules/views/views.module';
+import { VideosModule } from './modules/videos/videos.module';
+import { FollowsModule } from './modules/follows/follows.module';
 import { SupportModule } from './modules/support/support.module';
 import { BlocksModule } from './modules/blocks/blocks.module';
 import { HealthModule } from './modules/health/health.module';
@@ -46,13 +47,14 @@ import { HealthModule } from './modules/health/health.module';
     AmenitiesModule,
     BillingModule,
     ReportsModule,
-    StoriesModule,
     VerificationModule,
     LiveModule,
     RatingModule,
     ReviewsModule,
     CommentsModule,
     ViewsModule,
+    VideosModule,
+    FollowsModule,
     SupportModule,
     BlocksModule,
   ],

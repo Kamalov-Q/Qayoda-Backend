@@ -3,7 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
 import { ListingsModule } from '../listings/listings.module';
 import { ReportsModule } from '../reports/reports.module';
-import { StoriesModule } from '../stories/stories.module';
+import { VideosModule } from '../videos/videos.module';
 import { VerificationModule } from '../verification/verification.module';
 import { RatesModule } from '../../shared/rates/rates.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -26,8 +26,8 @@ import { AdminSeedService } from './admin-seed.service';
     ListingsModule,
     ReportsModule,
     // Both only for the overview's "needs attention" counts.
-    StoriesModule,
     VerificationModule,
+    VideosModule,
     // Both only for GET /admin/system: the rate the app prices with, and the
     // SMS balance that every phone login depends on.
     RatesModule,

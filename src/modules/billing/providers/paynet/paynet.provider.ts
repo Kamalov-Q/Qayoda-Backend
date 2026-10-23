@@ -342,7 +342,12 @@ export class PaynetProvider {
     }
 
     private async findPayer(fields: PaynetFields): Promise<User | number> {
-        const raw = fields[this.config.get<string>('PAYNET_ACCOUNT_FIELD') ?? 'client_id'];
+        // A list, because Paynet's own config and the credentials they sent us
+        // disagreed on the field name (user_id vs client_id) for weeks. Taking
+        // the first field that is actually present costs nothing and means a
+        // rename on their side is not an outage on ours.
+        const names = (this.config.get<string>('PAYNET_ACCOUNT_FIELD') ?? 'client_id,user_id').split(',').map((n) => n.trim()).filter(Boolean);
+        const raw = names.map((n) => fields[n]).find((v) => v !== undefined);
         // Only a string or a number is an account reference. Anything else —
         // an object, an array — is a malformed request, not something to
         // stringify into "[object Object]" and then fail to find.
@@ -359,8 +364,11 @@ export class PaynetProvider {
         return user;
     }
 
+    /** Comma-separated, for the same reason as PAYNET_ACCOUNT_FIELD: Paynet has
+     *  more than one service id pointing at this one merchant. */
     private serviceOk(serviceId: unknown): boolean {
-        return String(serviceId) === this.config.get<string>('PAYNET_SERVICE_ID');
+        const ids = (this.config.get<string>('PAYNET_SERVICE_ID') ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+        return ids.includes(String(serviceId));
     }
 
     private authorized(header: string | undefined): boolean {

@@ -6,7 +6,7 @@
  * (e.g. "VIP_BADGE"): those are listed to the app like the rest, but nothing
  * charges them until the feature that sells them exists.
  */
-export const TARIFF_ACTIONS = ['LISTING_POST', 'STORY_POST', 'LISTING_PROMOTE'] as const;
+export const TARIFF_ACTIONS = ['LISTING_POST', 'LISTING_PROMOTE', 'VIDEO_POST'] as const;
 export type TariffAction = (typeof TARIFF_ACTIONS)[number];
 export const isBuiltInAction = (action: string): action is TariffAction =>
     (TARIFF_ACTIONS as readonly string[]).includes(action);
@@ -27,8 +27,8 @@ export enum TxKind {
     TOPUP = 'TOPUP',
     TOPUP_BONUS = 'TOPUP_BONUS',
     LISTING_POST = 'LISTING_POST',
-    STORY_POST = 'STORY_POST',
     LISTING_PROMOTE = 'LISTING_PROMOTE',
+    VIDEO_POST = 'VIDEO_POST',
     REFUND = 'REFUND',
     ADMIN_ADJUST = 'ADMIN_ADJUST',
 }

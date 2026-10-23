@@ -90,6 +90,19 @@ export class User {
   banExpiresAt: Date | null;
 
   /** Trust badge shown on listings. Manual admin verification. */
+  /**
+   * Followers and followees, denormalised.
+   *
+   * Maintained by FollowsService — the rows in `follows` are the truth, and
+   * these spare a COUNT on every profile open, which is the single most
+   * visited screen after the feed.
+   */
+  @Column({ name: 'follower_count', type: 'int', default: 0 })
+  followerCount: number;
+
+  @Column({ name: 'following_count', type: 'int', default: 0 })
+  followingCount: number;
+
   @Column({ name: 'is_verified_realtor', type: 'boolean', default: false })
   isVerifiedRealtor: boolean;
 

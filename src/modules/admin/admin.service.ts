@@ -15,14 +15,18 @@ import { UpdateImagesDto } from '../listings/dto/update-images.dto';
 import { TokenService } from '../auth/services/token.service';
 import { ReportsService } from '../reports/reports.service';
 import { ChatReportsService } from '../reports/chat-reports.service';
-import { StoriesService } from '../stories/stories.service';
 import { VerificationService } from '../verification/verification.service';
+import { VideosService } from '../videos/videos.service';
+import { VideoReportsService } from '../videos/video-reports.service';
 import { ageFrom } from '../users/user-profile.constants';
 import { RatesService } from '../../shared/rates/rates.service';
 import { EskizService } from '../notifications/eskiz.service';
 import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
 import { UserRole, UserStatus } from '../../shared/enums';
-import { AdminListingsQueryDto, AdminUsersQueryDto } from './dto/admin-query.dto';
+import {
+  AdminListingsQueryDto,
+  AdminUsersQueryDto,
+} from './dto/admin-query.dto';
 import {
   AdminListingStatusDto,
   AdminUserRoleDto,
@@ -46,8 +50,10 @@ export class AdminService {
     private readonly tokens: TokenService,
     private readonly reportsService: ReportsService,
     private readonly chatReportsService: ChatReportsService,
-    private readonly storiesService: StoriesService,
     private readonly verificationService: VerificationService,
+    // Both only for the overview's video numbers and its report queue.
+    private readonly videosService: VideosService,
+    private readonly videoReportsService: VideoReportsService,
     private readonly rates: RatesService,
     private readonly eskiz: EskizService,
   ) {}
@@ -97,12 +103,16 @@ export class AdminService {
       listingsByCategory,
       openReports,
       openChatReports,
-      openStoryReports,
       pendingVerifications,
+      videoStats,
+      openVideoReports,
     ] = await Promise.all([
       this.users.count(),
       this.users.count({ where: { role: UserRole.ADMIN } }),
-      this.users.createQueryBuilder('u').where('u.created_at >= :since', { since }).getCount(),
+      this.users
+        .createQueryBuilder('u')
+        .where('u.created_at >= :since', { since })
+        .getCount(),
       this.listings.count(),
       this.listings.count({ where: { status: ListingStatus.ACTIVE } }),
       this.listings.count({ where: { status: ListingStatus.ARCHIVED } }),
@@ -113,8 +123,9 @@ export class AdminService {
       this.countByCategory(),
       this.reportsService.openCount(),
       this.chatReportsService.openCount(),
-      this.storiesService.openReportCount(),
       this.verificationService.pendingCount(),
+      this.videosService.adminStats(),
+      this.videoReportsService.openCount(),
     ]);
 
     return {
@@ -128,8 +139,9 @@ export class AdminService {
       },
       reports: { open: openReports },
       chatReports: { open: openChatReports },
-      storyReports: { open: openStoryReports },
       verification: { pending: pendingVerifications },
+      videos: videoStats,
+      videoReports: { open: openVideoReports },
     };
   }
 
@@ -197,12 +209,15 @@ export class AdminService {
     qb: SelectQueryBuilder<Listing>,
     query: AdminListingsQueryDto,
   ) {
-    if (query.status) qb.andWhere('l.status = :status', { status: query.status });
+    if (query.status)
+      qb.andWhere('l.status = :status', { status: query.status });
     if (query.q?.trim()) {
       const q = `%${query.q.trim()}%`;
       qb.andWhere(
         new Brackets((w) =>
-          w.where('l.title ILIKE :q', { q }).orWhere('l.address ILIKE :q', { q }),
+          w
+            .where('l.title ILIKE :q', { q })
+            .orWhere('l.address ILIKE :q', { q }),
         ),
       );
     }
@@ -321,7 +336,11 @@ export class AdminService {
    * clears the access-guard cache, so the user is locked out on their next
    * request rather than when their token happens to expire.
    */
-  async setUserStatus(actorId: string, userId: string, dto: AdminUserStatusDto) {
+  async setUserStatus(
+    actorId: string,
+    userId: string,
+    dto: AdminUserStatusDto,
+  ) {
     if (userId === actorId) {
       throw new ForbiddenException({
         code: 'SELF_ACTION',
@@ -339,7 +358,8 @@ export class AdminService {
 
     await this.users.update(userId, {
       status: dto.status,
-      banReason: dto.status === UserStatus.BANNED ? (dto.banReason ?? null) : null,
+      banReason:
+        dto.status === UserStatus.BANNED ? (dto.banReason ?? null) : null,
       banExpiresAt: null,
     });
     if (dto.status === UserStatus.BANNED) {
@@ -484,7 +504,9 @@ export class AdminService {
       },
       reviewsWritten: {
         count: Number(reviews[0]?.count ?? 0),
-        average: reviews[0]?.avg ? Number(Number(reviews[0].avg).toFixed(1)) : null,
+        average: reviews[0]?.avg
+          ? Number(Number(reviews[0].avg).toFixed(1))
+          : null,
       },
       commentsWritten: Number(comments[0]?.count ?? 0),
       reports: {

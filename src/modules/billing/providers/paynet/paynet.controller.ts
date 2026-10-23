@@ -11,7 +11,9 @@ export class PaynetWebhookController {
     constructor(private readonly paynet: PaynetProvider) { }
 
     // @All, not @Post: a non-POST call must get JSON-RPC -32300, not Nest's 404.
-    @All()
+    // Both paths, because Paynet's production config calls /api/paynet/pay
+    // while the integration they signed off on uses /api/paynet.
+    @All(['', 'pay'])
     async rpc(
         @Req() req: Request,
         @Res({ passthrough: true }) res: Response,

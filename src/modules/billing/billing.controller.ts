@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Header, Param, ParseUUIDPipe, Post, Query, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { JwtAccessGuard } from "../auth/guards/jwt-access.guard";
 import { WalletService } from "./wallet.service";
@@ -21,7 +21,11 @@ export class WalletController {
         private readonly paynet: PaynetProvider,
     ) { }
 
+    // Express ETags this JSON and nothing sends Vary: Authorization, so an HTTP
+    // cache keys it by URL alone — on a shared device the next user would be
+    // handed the previous one's accountNo and pay into their wallet.
     @Get()
+    @Header('Cache-Control', 'no-store')
     async overview(@CurrentUser() user: AuthUser) {
         const data = await this.wallet.overview(user.sub);
         // Paynet is push-model: no order to create, so it is not in TopupService.
@@ -47,6 +51,7 @@ export class WalletController {
 
     /** Paynet checkout link for this user's account number; the app opens it. */
     @Get('paynet-link')
+    @Header('Cache-Control', 'no-store')
     async paynetLink(@CurrentUser() user: AuthUser, @Query() q: PaynetLinkQueryDto) {
         if (!this.paynet.enabled) throw new BadRequestException({ code: 'PROVIDER_UNAVAILABLE', message: 'PAYNET is not enabled' });
         const accountNo = await this.wallet.accountNo(user.sub);

@@ -15,7 +15,7 @@ import {
 import { PresenceResponse } from './modules/chat/responses/receipt.response';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
 
   // Behind nginx on the same host: take the client IP from X-Forwarded-For,
   // or Paynet's IP allowlist sees 127.0.0.1 for every call.
