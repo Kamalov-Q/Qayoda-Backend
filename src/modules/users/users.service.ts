@@ -13,6 +13,11 @@ import {
   PublicProfileResponse,
 } from './responses/profile.response';
 import { UserCardResponse } from './responses/user-card.response';
+import type { UserSearchQueryDto } from './dto/user-search.query.dto';
+import type { UserSearchResponse } from './responses/user-search.response';
+import { likeContains, searchTerm } from '../../shared/search/like';
+import { UserStatus } from '../../shared/enums';
+import { ListingStatus } from '../listings/enums/listing-status.enum';
 import {
   ageFrom,
   type SocialLinks,
@@ -294,6 +299,95 @@ export class UsersService {
   }
 
   // ----------------------------------------------------------------- helpers
+
+  // ------------------------------------------------------------------ search
+
+  /**
+   * People, by name.
+   *
+   * Two queries and no joins on the hot path: the page of users, then one
+   * grouped count of their live listings. Counting listings per row would be
+   * a query each, and the alternative — a LEFT JOIN with a GROUP BY under
+   * LIMIT — makes the database sort the whole matched set before it can page
+   * it. Both get slow at exactly the moment search starts being used.
+   *
+   * Banned and deleted accounts are excluded: a name that opens a 404 is
+   * worse than no result at all. Blocks are NOT applied \u2014 they hide content
+   * and presence, and a block the blocker can detect by searching is not a
+   * block, it is a hint.
+   */
+  async searchUsers(query: UserSearchQueryDto): Promise<UserSearchResponse> {
+    const term = searchTerm(query.q);
+    // Below the floor this is not a search \u2014 see MIN_SEARCH_LENGTH. An
+    // empty page rather than an error: the client asks as you type, and one
+    // character is a question still being written, not a bad request.
+    if (!term) return { total: 0, items: [] };
+
+    const limit = query.limit ?? 25;
+    const offset = query.offset ?? 0;
+    const pattern = likeContains(term);
+
+    const qb = this.users
+      .createQueryBuilder('u')
+      .where('u.deleted_at IS NULL')
+      .andWhere('u.status = :active', { active: UserStatus.ACTIVE })
+      .andWhere(
+        `(u.name ILIKE :pattern
+       OR u.surname ILIKE :pattern
+       OR (coalesce(u.name, '') || ' ' || coalesce(u.surname, '')) ILIKE :pattern)`,
+        { pattern },
+      );
+
+    const [people, total] = await qb
+      .select([
+        'u.id',
+        'u.name',
+        'u.surname',
+        'u.avatarThumbUrl',
+        'u.isVerifiedRealtor',
+        'u.followerCount',
+      ])
+      // Verified realtors first, then by reach: a name search in a market
+      // this size returns a handful of people, and the one worth showing
+      // first is the one most likely to be the agency being looked for.
+      .orderBy('u.is_verified_realtor', 'DESC')
+      .addOrderBy('u.follower_count', 'DESC')
+      // A stable tie-break, or the same page can return the same row twice
+      // across two requests with equal counts.
+      .addOrderBy('u.id', 'ASC')
+      .limit(limit)
+      .offset(offset)
+      .getManyAndCount();
+
+    const counts = await this.liveListingCounts(people.map((u) => u.id));
+
+    return {
+      total,
+      items: people.map((u) => ({
+        id: u.id,
+        name: u.name,
+        surname: u.surname,
+        avatarThumbUrl: u.avatarThumbUrl,
+        isVerifiedRealtor: u.isVerifiedRealtor,
+        followerCount: u.followerCount,
+        listingCount: counts.get(u.id) ?? 0,
+      })),
+    };
+  }
+
+  /** Live listings per owner, for a page of search results. One query. */
+  private async liveListingCounts(ids: string[]): Promise<Map<string, number>> {
+    if (!ids.length) return new Map();
+
+    const rows = await this.users.query<{ owner_id: string; n: number }[]>(
+      `SELECT owner_id, count(*)::int AS n
+         FROM listings
+        WHERE owner_id = ANY($1) AND status = $2
+        GROUP BY owner_id`,
+      [ids, ListingStatus.ACTIVE],
+    );
+    return new Map(rows.map((r) => [r.owner_id, r.n]));
+  }
 
   private async findOrFail(userId: string): Promise<User> {
     const user = await this.users.findOneBy({ id: userId });

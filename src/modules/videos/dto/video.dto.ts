@@ -97,6 +97,16 @@ export class VideoFeedQueryDto {
   @IsString()
   @MaxLength(120)
   cursor?: string;
+
+  @ApiPropertyOptional({
+    maxLength: 100,
+    description:
+      'Free text, matched against the caption. While set the feed stops being personalised \u2014 the watched / unwatched phases are skipped and results come back newest-first \u2014 because "things you have not seen" is not what someone asking a question wants. Shorter than 2 characters is ignored.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  q?: string;
 }
 
 export class MyVideosQueryDto {

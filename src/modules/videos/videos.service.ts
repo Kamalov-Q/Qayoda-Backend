@@ -21,6 +21,7 @@ import {
   VideoFailReason,
   VideoStatus,
 } from './videos.constants';
+import { likeContains, searchTerm } from '../../shared/search/like';
 import { BunnyStreamService, type BunnyVideo } from './bunny-stream.service';
 import { Listing } from '../listings/entities/listing.entity';
 import { ListingStatus } from '../listings/enums/listing-status.enum';
@@ -358,7 +359,20 @@ export class VideosService {
   ): Promise<VideoFeedPage> {
     const limit = Math.min(q.limit ?? VIDEO_FEED_MAX, VIDEO_FEED_MAX);
     const cursor = this.decodeCursor(q.cursor);
-    const phase: FeedPhase = cursor?.phase ?? (viewerKey ? 'u' : 'a');
+    const term = searchTerm(q.q);
+    /**
+     * A search is not a feed.
+     *
+     * The two phases exist to show somebody what they have not watched
+     * before what they have, which is the right answer to "show me
+     * something". It is the wrong answer to "find me videos about X": the
+     * match either exists or it does not, and hiding half the matches
+     * because they are already watched makes a search look broken. So a
+     * search runs the 'a' (all) phase and nothing else.
+     */
+    const phase: FeedPhase = term
+      ? 'a'
+      : (cursor?.phase ?? (viewerKey ? 'u' : 'a'));
 
     // The Following feed is meaningless without a session: there is nobody
     // to follow yet, and an empty page says that better than everybody's
@@ -374,10 +388,12 @@ export class VideosService {
       viewerId,
       viewerKey,
       q.scope,
+      term,
     );
 
     // The unwatched pool ran dry: top the page up from the watched one rather
-    // than handing back a half-empty screen with nothing after it.
+    // than handing back a half-empty screen with nothing after it. Never on a
+    // search — there is no second pool to top up from.
     if (phase === 'u' && rows.length < limit) {
       const seen = await this.feedPage(
         's',
@@ -408,6 +424,8 @@ export class VideosService {
     viewerId: string | null,
     viewerKey: string | null,
     scope?: 'foryou' | 'following',
+    /** Already trimmed and length-checked by the caller. */
+    term?: string,
   ): Promise<Video[]> {
     const qb = this.videos
       .createQueryBuilder('v')
@@ -455,6 +473,13 @@ export class VideosService {
             WHERE f.follower_id = :me AND f.followee_id = v.author_id)`,
         { me: viewerId },
       );
+    }
+
+    // Caption only. A description search that also matched the author's
+    // name would quietly make this a people search too, and the one on the
+    // People tab is the one that can rank and paginate people properly.
+    if (term) {
+      qb.andWhere('v.caption ILIKE :term', { term: likeContains(term) });
     }
 
     if (phase !== 'a' && viewerKey) {
@@ -548,6 +573,39 @@ export class VideosService {
 
     if (Object.keys(patch).length) await this.videos.update(video.id, patch);
     return this.detail(videoId, userId);
+  }
+
+  /**
+   * The dashboard's edit.
+   *
+   * Narrower than it looks, and deliberately so. A moderator fixes a caption
+   * — a phone number where the rules say none, a wall of keywords, somebody
+   * else's address — and corrects or clears a listing link that points at
+   * the wrong advert. Everything else about a reel (the footage, who posted
+   * it, what it cost, when it published) is not editable by anybody, here or
+   * in the app, because none of it is a mistake that can be corrected after
+   * the fact.
+   *
+   * The listing is still checked against the VIDEO'S AUTHOR rather than
+   * against the admin doing the editing. "A reel points at one of its own
+   * author's listings" is an invariant both the feed and the listing page
+   * read; an admin pointing a clip at a stranger's advert would quietly
+   * break both, and would hand one seller's video to another seller's page.
+   */
+  async adminUpdate(videoId: string, dto: UpdateVideoDto) {
+    const video = await this.videos.findOneBy({ id: videoId });
+    if (!video) throw new NotFoundException('Video not found');
+
+    const patch: Partial<Video> = {};
+    if (dto.caption !== undefined) patch.caption = dto.caption || null;
+    if (dto.listingId !== undefined) {
+      patch.listingId = dto.listingId
+        ? (await this.mustOwnListing(dto.listingId, video.authorId)).id
+        : null;
+    }
+
+    if (Object.keys(patch).length) await this.videos.update(video.id, patch);
+    return this.adminDetail(videoId);
   }
 
   /**

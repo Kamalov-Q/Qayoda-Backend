@@ -13,6 +13,7 @@ import { BlocksService } from '../blocks/blocks.service';
 import { UserNotificationsService } from '../notifications/user-notifications.service';
 import { NotificationKind } from '../notifications/notifications.constants';
 import type { FollowListQueryDto } from './follows.dto';
+import { likeContains, searchTerm } from '../../shared/search/like';
 
 const DEFAULT_LIMIT = 25;
 
@@ -178,22 +179,51 @@ export class FollowsService {
     const limit = q.limit ?? DEFAULT_LIMIT;
     const offset = q.offset ?? 0;
     const other = column === 'followee_id' ? 'follower_id' : 'followee_id';
+    const term = searchTerm(q.q);
+
+    /**
+     * The join that narrows a list to a name.
+     *
+     * Searching has to reach the users table: the name being matched lives
+     * there, not on the follow row. Parameterised by placeholder index
+     * because the page query and the count query bind a different number of
+     * values before it. Without a term it is the empty string, so opening a
+     * list — the common case — still reads one index and joins nothing.
+     *
+     * The match is on each part AND on the two joined, so "Ali Valiyev"
+     * finds a row that neither column holds on its own.
+     */
+    const nameJoin = (placeholder: number) =>
+      term
+        ? `JOIN users u ON u.id = f.${other}
+            AND (u.name ILIKE $${placeholder}
+              OR u.surname ILIKE $${placeholder}
+              OR (coalesce(u.name, '') || ' ' || coalesce(u.surname, ''))
+                 ILIKE $${placeholder})`
+        : '';
+    const pattern = term ? [likeContains(term)] : [];
 
     // Raw rather than the query builder because the column being matched is
     // the only difference between "followers" and "following", and that is a
     // column name, not a value. Both names are literals from this function's
-    // own union type, so nothing user-supplied reaches the SQL.
+    // own union type, so nothing user-supplied reaches the SQL; the term
+    // itself is bound.
     const [rows, total] = await Promise.all([
       this.follows.query<{ id: string }[]>(
-        `SELECT ${other} AS id FROM follows
-          WHERE ${column} = $1
-          ORDER BY created_at DESC
+        `SELECT f.${other} AS id FROM follows f
+          ${nameJoin(4)}
+          WHERE f.${column} = $1
+          ORDER BY f.created_at DESC
           LIMIT $2 OFFSET $3`,
-        [userId, limit, offset],
+        [userId, limit, offset, ...pattern],
       ),
       this.follows.query<{ n: number }[]>(
-        `SELECT count(*)::int AS n FROM follows WHERE ${column} = $1`,
-        [userId],
+        // Counted under the same filter, so "1 of 40" never appears over a
+        // search that matched one person.
+        `SELECT count(*)::int AS n FROM follows f
+          ${nameJoin(2)}
+          WHERE f.${column} = $1`,
+        [userId, ...pattern],
       ),
     ]);
 

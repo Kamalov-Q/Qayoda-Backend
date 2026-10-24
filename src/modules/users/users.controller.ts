@@ -22,6 +22,8 @@ import { ErrorResponse } from 'src/shared/responses/error.response';
 import { UsersService } from './users.service';
 import { UserProfileResponse } from './responses/public-user.response';
 import { OwnerListingsQueryDto } from './dto/owner-listings.query.dto';
+import { UserSearchQueryDto } from './dto/user-search.query.dto';
+import { UserSearchResponse } from './responses/user-search.response';
 
 @ApiTags('Users')
 @ApiBearerAuth('access-token')
@@ -29,6 +31,25 @@ import { OwnerListingsQueryDto } from './dto/owner-listings.query.dto';
 @Controller('users')
 export class UsersController {
   constructor(private readonly users: UsersService) {}
+
+  @ApiOperation({
+    summary: 'Find people by name',
+    description: [
+      'The People tab of the app\u2019s search box. Matches name and surname, and the two joined, so a full name finds someone neither column holds on its own.',
+      '',
+      'Not the phone number \u2014 a directory you can reverse-look-up a number in is a different and much worse product than a way to find a seller you have heard of.',
+      '',
+      'Banned and deleted accounts are left out. Blocks are not applied: a block somebody can detect by searching is a hint, not a block.',
+      '',
+      'Verified realtors first, then by follower count. A term under 2 characters returns an empty page rather than an error \u2014 the client asks as you type, and one letter is a question still being written.',
+    ].join('\n'),
+  })
+  @ApiOkResponse({ type: UserSearchResponse })
+  @ApiUnauthorizedResponse({ type: ErrorResponse })
+  @Get()
+  search(@Query() query: UserSearchQueryDto) {
+    return this.users.searchUsers(query);
+  }
 
   @ApiOperation({
     summary: "Open another user's profile",

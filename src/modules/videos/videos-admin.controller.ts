@@ -18,6 +18,7 @@ import { UserRole } from '../../shared/enums';
 import { VideosService } from './videos.service';
 import { VideoReportsService } from './video-reports.service';
 import { AdminVideosQueryDto, RemoveVideoDto } from './dto/admin-videos.dto';
+import { UpdateVideoDto } from './dto/video.dto';
 import {
   AdminVideoReportsQueryDto,
   ResolveVideoReportDto,
@@ -54,6 +55,19 @@ export class VideosAdminController {
     // unpublished from everyone but its author — an admin reviewing a
     // takedown needs to see exactly the ones that are not public.
     return this.videos.adminDetail(id);
+  }
+
+  @ApiOperation({
+    summary: 'Fix a caption, or the listing a clip points at',
+    description:
+      "The two things about a reel that can be wrong rather than against the rules — a caption with a phone number in it, a clip attached to the wrong advert. The listing must still belong to the video's author; moderation does not get to move somebody's video onto somebody else's page. Everything else is immutable, and a clip that should not be up at all is a takedown, not an edit.",
+  })
+  @Patch(':id')
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateVideoDto,
+  ) {
+    return this.videos.adminUpdate(id, dto);
   }
 
   @ApiOperation({
