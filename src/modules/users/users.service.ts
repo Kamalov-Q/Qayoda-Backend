@@ -357,8 +357,11 @@ export class UsersService {
       // Verified realtors first, then by reach: a name search in a market
       // this size returns a handful of people, and the one worth showing
       // first is the one most likely to be the agency being looked for.
-      .orderBy('u.is_verified_realtor', 'DESC')
-      .addOrderBy('u.follower_count', 'DESC')
+      // Property names, like the select above. Raw column names work too —
+      // TypeORM passes them through — but then renaming a column in the
+      // entity updates the select and silently breaks the order.
+      .orderBy('u.isVerifiedRealtor', 'DESC')
+      .addOrderBy('u.followerCount', 'DESC')
       // A stable tie-break, or the same page can return the same row twice
       // across two requests with equal counts.
       .addOrderBy('u.id', 'ASC')

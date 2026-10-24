@@ -137,8 +137,9 @@ export class CommentsService {
   async create(listingId: string, authorId: string, dto: CreateCommentDto) {
     await this.mustExistListing(listingId);
 
+    let parent: ListingComment | null = null;
     if (dto.parentId) {
-      const parent = await this.comments.findOneBy({ id: dto.parentId });
+      parent = await this.comments.findOneBy({ id: dto.parentId });
       if (!parent || parent.listingId !== listingId) {
         throw new NotFoundException('Comment not found');
       }
@@ -181,7 +182,7 @@ export class CommentsService {
     });
 
     await this.recount(listingId);
-    await this.notifyAbout(saved, listingId, authorId, dto.parentId);
+    await this.notifyAbout(saved, listingId, authorId, parent);
 
     const authors = await this.authorMap([authorId]);
     return this.shape(saved, authors, new Set());
@@ -202,15 +203,10 @@ export class CommentsService {
     comment: ListingComment,
     listingId: string,
     authorId: string,
-    parentId?: string | null,
+    /** Already loaded and validated by create() — not re-read here. */
+    parent: ListingComment | null,
   ): Promise<void> {
-    if (parentId) {
-      const parent = await this.comments.findOne({
-        where: { id: parentId },
-        select: { id: true, authorId: true },
-      });
-      if (!parent) return;
-
+    if (parent) {
       await this.notifications.notify({
         userId: parent.authorId,
         actorId: authorId,

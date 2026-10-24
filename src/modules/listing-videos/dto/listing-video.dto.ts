@@ -11,6 +11,6 @@ export class CreateListingVideoDto {
       'What the phone is about to send. Passed through to tus metadata, which Bunny requires; it is a hint for the encoder, not a check — the real limits are enforced against the encoded file.',
   })
   @IsOptional()
-  @IsIn(MIME_TYPES as unknown as string[])
+  @IsIn(MIME_TYPES)
   mimeType?: string;
 }

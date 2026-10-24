@@ -119,6 +119,47 @@ export class UserNotificationsService {
     }
   }
 
+  /**
+   * Tell many people the same thing, in one statement.
+   *
+   * notify() in a loop is one round trip per recipient, which for a fan-out
+   * to five hundred followers is five hundred of them while a video publish
+   * waits. This is the same contract — never throws, never tells you about
+   * yourself — in a single insert.
+   *
+   * No dedupe branch: the kinds that collapse (chat, likes) are per-person
+   * events and never arrive as a fan-out.
+   */
+  async notifyMany(
+    userIds: string[],
+    input: Omit<NotifyInput, 'userId'>,
+  ): Promise<void> {
+    try {
+      const recipients = [...new Set(userIds)].filter(
+        (id) => id && id !== input.actorId,
+      );
+      if (!recipients.length) return;
+
+      await this.notifications.insert(
+        recipients.map((userId) => ({
+          userId,
+          kind: input.kind,
+          actorId: input.actorId ?? null,
+          videoId: input.videoId ?? null,
+          commentId: input.commentId ?? null,
+          listingId: input.listingId ?? null,
+          conversationId: input.conversationId ?? null,
+        })),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Fan-out of ${input.kind} to ${userIds.length} failed: ${
+          (error as Error).message
+        }`,
+      );
+    }
+  }
+
   /** The inbox, newest first, hydrated with whoever and whatever it is about. */
   async list(userId: string, limit = NOTIFICATIONS_PAGE, offset = 0) {
     const [rows, total] = await this.notifications.findAndCount({

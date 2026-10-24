@@ -11,8 +11,13 @@
 
 BEGIN;
 
+-- Same generator every other table here uses. gen_random_uuid() is built in
+-- from PG 13 and would also work, but mixing the two means the next person
+-- has to find out which tables use which.
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 CREATE TABLE IF NOT EXISTS listing_videos (
-  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  id             uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
   listing_id     uuid NOT NULL REFERENCES listings (id) ON DELETE CASCADE,
   -- Copied from the listing so "is this yours" is not a join.
   owner_id       uuid NOT NULL REFERENCES users (id) ON DELETE CASCADE,

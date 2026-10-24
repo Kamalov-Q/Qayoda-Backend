@@ -446,14 +446,14 @@ export class VideosService {
         [authorId, FOLLOWER_FANOUT_CAP],
       );
 
-      for (const row of rows) {
-        await this.notifications.notify({
-          userId: row.follower_id,
+      await this.notifications.notifyMany(
+        rows.map((r) => r.follower_id),
+        {
           actorId: authorId,
           kind: NotificationKind.FOLLOWED_USER_POSTED,
           videoId,
-        });
-      }
+        },
+      );
     } catch (error) {
       // Same contract as notify() itself: a publish must not fail because
       // the people who follow the author could not be told about it.
