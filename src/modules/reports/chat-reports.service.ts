@@ -217,29 +217,35 @@ export class ChatReportsService {
 
     const rows = await this.conversations.find({ where: { id: In(unique) } });
     const listings = await this.listings.find({
-      where: { id: In([...new Set(rows.map((c) => c.listingId))]) },
+      // Direct threads carry no advert — see Conversation.listingId.
+      where: {
+        id: In([
+          ...new Set(
+            rows.map((c) => c.listingId).filter((v): v is string => !!v),
+          ),
+        ]),
+      },
       select: { id: true, title: true, status: true },
     });
     const people = await this.nameMap(rows.flatMap((c) => [c.hostId, c.guestId]));
     const listingById = new Map(listings.map((l) => [l.id, l]));
 
     return new Map<string, ConversationCard>(
-      rows.map((c) => [
+      rows.map((c) => {
+        const listing = c.listingId ? listingById.get(c.listingId) : undefined;
+        return [
         c.id,
         {
           id: c.id,
           lastMessageAt: c.lastMessageAt,
           host: people.get(c.hostId) ?? null,
           guest: people.get(c.guestId) ?? null,
-          listing: listingById.get(c.listingId)
-            ? {
-                id: c.listingId,
-                title: listingById.get(c.listingId)!.title,
-                status: listingById.get(c.listingId)!.status,
-              }
+          listing: listing
+            ? { id: listing.id, title: listing.title, status: listing.status }
             : null,
         },
-      ]),
+        ] as const;
+      }),
     );
   }
 

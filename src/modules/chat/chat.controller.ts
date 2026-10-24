@@ -32,6 +32,7 @@ import {
   ForwardMessageDto,
   PinMessageDto,
 } from './dto/ws-events.dto';
+import { StartDirectConversationDto } from './dto/start-direct-conversation.dto';
 import { StartConversationDto } from './dto/start-conversation.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 import { EditMessageDto } from './dto/edit-message.dto';
@@ -141,6 +142,27 @@ export class ChatController {
     return this.chatService.startConversation(
       user.sub,
       dto.listingId,
+      dto.message,
+    );
+  }
+
+  @ApiOperation({
+    summary: 'Start a conversation with a PERSON',
+    description: [
+      'For the sellers directory: a profile with no live listing has no advert to open a thread about, and until this existed the Message button on such a profile simply did not appear.',
+      '',
+      'Idempotent per pair and direction-agnostic — if either of you has already written, this returns that same thread rather than opening a second one.',
+    ].join('\n'),
+  })
+  @UseGuards(PhoneRequiredGuard)
+  @Post('conversations/direct')
+  startDirect(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: StartDirectConversationDto,
+  ) {
+    return this.chatService.startDirectConversation(
+      user.sub,
+      dto.userId,
       dto.message,
     );
   }

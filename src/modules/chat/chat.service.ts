@@ -123,7 +123,10 @@ export class ChatService {
       ...new Set(convs.map((c) => this.otherPartyOf(c, userId))),
     ];
 
-    const listingIds = [...new Set(convs.map((c) => c.listingId))];
+    // Direct threads carry no advert, so they contribute no id to look up.
+    const listingIds = [
+      ...new Set(convs.map((c) => c.listingId).filter((v): v is string => !!v)),
+    ];
 
     const [unreadMap, presence, profiles, listings] = await Promise.all([
       this.messages.countUnreadGrouped(convIds, userId),
@@ -142,7 +145,9 @@ export class ChatService {
       return {
         id: c.id,
         listingId: c.listingId,
-        listingTitle: listingMap.get(c.listingId)?.title ?? null,
+        listingTitle: c.listingId
+          ? (listingMap.get(c.listingId)?.title ?? null)
+          : null,
         role: c.hostId === userId ? ('host' as const) : ('guest' as const),
         other: {
           ...(profileMap.get(otherId) ?? { id: otherId }),
@@ -159,6 +164,73 @@ export class ChatService {
   async getConversation(conversationId: string, userId: string) {
     const conv = await this.assertParticipant(conversationId, userId);
     return this.toConversationDto(conv, userId);
+  }
+
+  /**
+   * Write to a PERSON rather than about an advert.
+   *
+   * The sellers directory puts profiles in front of people, and a profile
+   * with no live listing had no thread to open — the Message button simply
+   * did not appear, which read as the app refusing to let you contact
+   * somebody rather than as a missing advert.
+   *
+   * One thread per pair, whichever way round it is opened: whoever writes
+   * first is recorded as the guest, and the partial unique index on
+   * (least(host, guest), greatest(host, guest)) is what stops the two of
+   * them ending up in separate threads talking past each other.
+   */
+  async startDirectConversation(
+    senderId: string,
+    recipientId: string,
+    dto: SendMessageDto,
+  ) {
+    if (senderId === recipientId) {
+      throw new BadRequestException(
+        'You cannot start a conversation with yourself',
+      );
+    }
+
+    await this.blocks.assertNotBlocked(senderId, recipientId);
+
+    const existing = await this.conversations.findDirectBetween(
+      senderId,
+      recipientId,
+    );
+    if (existing) {
+      const message = await this.sendMessage(existing.id, senderId, dto);
+      return {
+        conversation: await this.getConversation(existing.id, senderId),
+        message,
+      };
+    }
+
+    let conv: Conversation;
+    try {
+      conv = await this.conversations.save(
+        this.conversations.create({
+          listingId: null,
+          // The person written TO is the host, so the role each side sees
+          // matches the listing case: host is who was approached.
+          hostId: recipientId,
+          guestId: senderId,
+        }),
+      );
+    } catch (err) {
+      // Two taps race the partial unique index; the loser reuses the row.
+      if ((err as { code?: string }).code !== UNIQUE_VIOLATION) throw err;
+      const raced = await this.conversations.findDirectBetween(
+        senderId,
+        recipientId,
+      );
+      if (!raced) throw err;
+      conv = raced;
+    }
+
+    const message = await this.sendMessage(conv.id, senderId, dto);
+    return {
+      conversation: await this.getConversation(conv.id, senderId),
+      message,
+    };
   }
 
   async sendMessage(

@@ -1,12 +1,22 @@
-import { Column, CreateDateColumn, Entity, Index, OneToMany, PrimaryGeneratedColumn, Unique } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 import { Message } from './message.entity';
 @Entity('conversations')
-@Unique(['listingId', 'guestId'])
 @Index('idx_conversations_last_message', ['lastMessageAt'])
 export class Conversation {
   @PrimaryGeneratedColumn('uuid') id: string;
 
-  @Index() @Column({ name: 'listing_id', type: 'uuid' }) listingId: string;
+  /**
+   * The advert this thread is about, or NULL for a direct one.
+   *
+   * Null means "about this person": the sellers directory lets somebody
+   * write to a profile that has no live listing, and there is no advert to
+   * hang that on. Uniqueness is two partial indexes rather than a
+   * constraint — see sql/2026-10-24-direct-conversations.sql, because a
+   * plain UNIQUE(listing_id, guest_id) stops meaning anything once the
+   * column is nullable.
+   */
+  @Index() @Column({ name: 'listing_id', type: 'uuid', nullable: true })
+  listingId: string | null;
   @Index() @Column({ name: 'host_id', type: 'uuid' }) hostId: string;
   @Index() @Column({ name: 'guest_id', type: 'uuid' }) guestId: string;
 
