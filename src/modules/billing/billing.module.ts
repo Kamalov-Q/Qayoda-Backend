@@ -1,3 +1,4 @@
+import { InboxModule } from '../notifications/inbox.module';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
@@ -29,6 +30,7 @@ import { TariffsController } from './tariffs.controller';
 
 @Module({
     imports: [
+    InboxModule,
         AuthModule,
         TypeOrmModule.forFeature([Wallet, WalletTransaction, Payment, PaymentWebhookEvent, Tariff, BonusTier, User]),
     ],

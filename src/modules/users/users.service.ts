@@ -312,11 +312,18 @@ export class UsersService {
    * it. Both get slow at exactly the moment search starts being used.
    *
    * Banned and deleted accounts are excluded: a name that opens a 404 is
-   * worse than no result at all. Blocks are NOT applied \u2014 they hide content
-   * and presence, and a block the blocker can detect by searching is not a
-   * block, it is a hint.
+   * worse than no result at all.
+   *
+   * Blocked people are NOT excluded, but each row says whether the viewer
+   * blocked them. Hiding them would make the block detectable by its own
+   * absence, and would leave no way to find somebody in order to unblock
+   * them; marking the row tells the viewer why the profile behind it will
+   * look empty before they tap it.
    */
-  async searchUsers(query: UserSearchQueryDto): Promise<UserSearchResponse> {
+  async searchUsers(
+    query: UserSearchQueryDto,
+    viewerId: string,
+  ): Promise<UserSearchResponse> {
     const term = searchTerm(query.q);
     // Below the floor this is not a search \u2014 see MIN_SEARCH_LENGTH. An
     // empty page rather than an error: the client asks as you type, and one
@@ -359,7 +366,11 @@ export class UsersService {
       .offset(offset)
       .getManyAndCount();
 
-    const counts = await this.liveListingCounts(people.map((u) => u.id));
+    const ids = people.map((u) => u.id);
+    const [counts, blocked] = await Promise.all([
+      this.liveListingCounts(ids),
+      this.blocks.blockedSet(viewerId, ids),
+    ]);
 
     return {
       total,
@@ -371,6 +382,7 @@ export class UsersService {
         isVerifiedRealtor: u.isVerifiedRealtor,
         followerCount: u.followerCount,
         listingCount: counts.get(u.id) ?? 0,
+        blockedByMe: blocked.has(u.id),
       })),
     };
   }

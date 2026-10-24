@@ -104,3 +104,12 @@ export type VideoReportReason = (typeof VIDEO_REPORT_REASONS)[number];
 
 export const VIDEO_REPORT_STATUSES = ['OPEN', 'RESOLVED', 'DISMISSED'] as const;
 export type VideoReportStatus = (typeof VIDEO_REPORT_STATUSES)[number];
+
+/**
+ * How many followers hear about a new reel.
+ *
+ * An inbox needs a row per person, so a popular author posting is a write
+ * amplification problem. Past this the Following feed carries it instead —
+ * it resolves the same relationship on read and is complete by construction.
+ */
+export const FOLLOWER_FANOUT_CAP = 500;

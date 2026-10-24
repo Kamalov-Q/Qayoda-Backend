@@ -16,6 +16,7 @@ import {
   LISTING_LINK_BOOST_HOURS,
   VIDEO_DAILY_LIMIT,
   VIDEO_DURATION_SLACK_SEC,
+  FOLLOWER_FANOUT_CAP,
   VIDEO_FEED_MAX,
   VIDEO_MAX_DURATION_SEC,
   VideoFailReason,
@@ -290,6 +291,7 @@ export class VideosService {
         kind: NotificationKind.VIDEO_READY,
         videoId: video.id,
       });
+      await this.notifyFollowersOfPost(video.authorId, video.id);
     } catch (error) {
       if (!this.isInsufficientFunds(error)) throw error;
 
@@ -415,6 +417,52 @@ export class VideosService {
       nextCursor:
         rows.length === limit ? this.encodeCursor(phase, rows.at(-1)!) : null,
     };
+  }
+
+  /**
+   * Tell this author's followers that a new reel is up.
+   *
+   * Fan-out on WRITE, unlike the Following feed, which resolves the same
+   * relationship per query on read. The two are different shapes of problem:
+   * the feed asks "what is there" once per scroll and can filter; an inbox
+   * has to have a row per person, so somebody has to write them.
+   *
+   * Capped, and deliberately. A seller with ten thousand followers posting
+   * five clips a day is fifty thousand rows that nobody reads, and the cap
+   * is the difference between a notification and a broadcast. Past it the
+   * Following feed is still the complete answer \u2014 which is where this kind
+   * of thing belongs anyway.
+   */
+  private async notifyFollowersOfPost(
+    authorId: string,
+    videoId: string,
+  ): Promise<void> {
+    try {
+      const rows = await this.videos.query<{ follower_id: string }[]>(
+        `SELECT follower_id FROM follows
+          WHERE followee_id = $1
+          ORDER BY created_at DESC
+          LIMIT $2`,
+        [authorId, FOLLOWER_FANOUT_CAP],
+      );
+
+      for (const row of rows) {
+        await this.notifications.notify({
+          userId: row.follower_id,
+          actorId: authorId,
+          kind: NotificationKind.FOLLOWED_USER_POSTED,
+          videoId,
+        });
+      }
+    } catch (error) {
+      // Same contract as notify() itself: a publish must not fail because
+      // the people who follow the author could not be told about it.
+      this.logger.warn(
+        `Follower fan-out for video ${videoId} failed: ${
+          (error as Error).message
+        }`,
+      );
+    }
   }
 
   private feedPage(

@@ -8,6 +8,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, IsNull, Repository } from 'typeorm';
 import { ListingComment, ListingCommentLike } from './comment.entity';
 import { Listing } from '../listings/entities/listing.entity';
+import { UserNotificationsService } from '../notifications/user-notifications.service';
+import { NotificationKind } from '../notifications/notifications.constants';
 import { ListingLiveGateway } from '../live/listing-live.gateway';
 import { User } from '../users/entities/user.entity';
 import { UserRole } from '../../shared/enums';
@@ -47,6 +49,7 @@ export class CommentsService {
     @InjectRepository(User) private readonly users: Repository<User>,
     private readonly ds: DataSource,
     private readonly live: ListingLiveGateway,
+    private readonly notifications: UserNotificationsService,
   ) {}
 
   /**
@@ -178,9 +181,59 @@ export class CommentsService {
     });
 
     await this.recount(listingId);
+    await this.notifyAbout(saved, listingId, authorId, dto.parentId);
 
     const authors = await this.authorMap([authorId]);
     return this.shape(saved, authors, new Set());
+  }
+
+  /**
+   * Who hears about a new comment.
+   *
+   * A reply tells the person replied to; a top-level comment tells whoever
+   * owns the listing. Never both for the same comment, and never yourself —
+   * notify() drops a notification whose actor is its recipient, so somebody
+   * replying under their own ad is silent without a check here.
+   *
+   * Outside the transaction and never awaited for correctness: a comment
+   * that failed because its notification did would be a bug in commenting.
+   */
+  private async notifyAbout(
+    comment: ListingComment,
+    listingId: string,
+    authorId: string,
+    parentId?: string | null,
+  ): Promise<void> {
+    if (parentId) {
+      const parent = await this.comments.findOne({
+        where: { id: parentId },
+        select: { id: true, authorId: true },
+      });
+      if (!parent) return;
+
+      await this.notifications.notify({
+        userId: parent.authorId,
+        actorId: authorId,
+        kind: NotificationKind.LISTING_COMMENT_REPLY,
+        listingId,
+        commentId: comment.id,
+      });
+      return;
+    }
+
+    const listing = await this.listings.findOne({
+      where: { id: listingId },
+      select: { id: true, ownerId: true },
+    });
+    if (!listing) return;
+
+    await this.notifications.notify({
+      userId: listing.ownerId,
+      actorId: authorId,
+      kind: NotificationKind.LISTING_COMMENT,
+      listingId,
+      commentId: comment.id,
+    });
   }
 
   /** Authors edit their own words, and nobody else's. */

@@ -18,6 +18,12 @@ export interface NotifyInput {
   actorId?: string | null;
   videoId?: string | null;
   commentId?: string | null;
+  /** Listing comments, replies and reviews — what the row opens. */
+  listingId?: string | null;
+  /** Chat. One unread row per conversation, never one per message. */
+  conversationId?: string | null;
+  /** Amounts, providers, tariff names: printed, never joined to. */
+  meta?: Record<string, unknown> | null;
 }
 
 /**
@@ -66,13 +72,44 @@ export class UserNotificationsService {
         if (existing && existing.createdAt > since) return;
       }
 
-      await this.notifications.insert({
-        userId: input.userId,
-        kind: input.kind,
-        actorId: input.actorId ?? null,
-        videoId: input.videoId ?? null,
-        commentId: input.commentId ?? null,
-      });
+      // Chat collapses per thread: fifty messages in one conversation is
+      // one claim on attention, and fifty rows is how an inbox teaches
+      // people to stop opening it. Touching the existing unread row rather
+      // than inserting keeps it at the top of the list with the latest
+      // sender on it.
+      //
+      // ON CONFLICT against uq_notifications_unread_conversation, so two
+      // messages arriving at once cannot race into two rows — the unique
+      // partial index decides, not a read-then-write in this process.
+      if (input.kind === NotificationKind.CHAT_MESSAGE && input.conversationId) {
+        await this.notifications.query(
+          `INSERT INTO user_notifications
+             (user_id, kind, actor_id, conversation_id)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (user_id, conversation_id)
+             WHERE conversation_id IS NOT NULL AND read_at IS NULL
+           DO UPDATE SET actor_id = EXCLUDED.actor_id,
+                         created_at = now()`,
+          [input.userId, input.kind, input.actorId ?? null, input.conversationId],
+        );
+        return;
+      }
+
+      // save() rather than insert(): insert's QueryDeepPartialEntity cannot
+      // express a jsonb column whose type is an open Record, and the cast
+      // that would silence it is the kind that hides a real mistake later.
+      await this.notifications.save(
+        this.notifications.create({
+          userId: input.userId,
+          kind: input.kind,
+          actorId: input.actorId ?? null,
+          videoId: input.videoId ?? null,
+          commentId: input.commentId ?? null,
+          listingId: input.listingId ?? null,
+          conversationId: input.conversationId ?? null,
+          meta: input.meta ?? null,
+        }),
+      );
     } catch (error) {
       this.logger.warn(
         `Notification ${input.kind} for ${input.userId} not written: ${

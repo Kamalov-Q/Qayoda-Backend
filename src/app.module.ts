@@ -25,6 +25,7 @@ import { ReviewsModule } from './modules/reviews/reviews.module';
 import { CommentsModule } from './modules/comments/comments.module';
 import { ViewsModule } from './modules/views/views.module';
 import { VideosModule } from './modules/videos/videos.module';
+import { ListingVideosModule } from './modules/listing-videos/listing-videos.module';
 import { FollowsModule } from './modules/follows/follows.module';
 import { SupportModule } from './modules/support/support.module';
 import { BlocksModule } from './modules/blocks/blocks.module';
@@ -56,6 +57,7 @@ import { HealthModule } from './modules/health/health.module';
     CommentsModule,
     ViewsModule,
     VideosModule,
+    ListingVideosModule,
     FollowsModule,
     SupportModule,
     BlocksModule,

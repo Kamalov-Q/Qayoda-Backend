@@ -6,6 +6,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ListingsModule } from '../listings/listings.module';
 import { UsersModule } from '../users/users.module';
 import { AuthModule } from '../auth/auth.module';
+import { InboxModule } from '../notifications/inbox.module';
 import { BlocksModule } from '../blocks/blocks.module';
 import { ChatController } from './chat.controller';
 import { ConversationRepository } from './repositories/conversation.repository';
@@ -26,6 +27,7 @@ import { WsJwtGuard } from './guards/ws-jwt.guard';
     // this module's gateway to announce a change. forwardRef on both sides is
     // what lets Nest build either one first.
     forwardRef(() => BlocksModule),
+    InboxModule,
   ],
   controllers: [ChatController],
   providers: [

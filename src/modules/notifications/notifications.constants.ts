@@ -17,7 +17,41 @@ export enum NotificationKind {
   VIDEO_COMMENT = 'VIDEO_COMMENT',
   COMMENT_REPLY = 'COMMENT_REPLY',
   NEW_FOLLOWER = 'NEW_FOLLOWER',
+
+  /**
+   * Somebody you follow published a reel. The one kind here that is about
+   * someone else's activity rather than a reaction to yours — a following
+   * list is a subscription, and this is what it delivers.
+   */
+  FOLLOWED_USER_POSTED = 'FOLLOWED_USER_POSTED',
+
+  // --- listings: the actual product, silent until now ---------------------
+  LISTING_COMMENT = 'LISTING_COMMENT',
+  LISTING_COMMENT_REPLY = 'LISTING_COMMENT_REPLY',
+  LISTING_REVIEW = 'LISTING_REVIEW',
+
+  // --- chat ---------------------------------------------------------------
+  /** One row per CONVERSATION, not per message. See CHAT_DEDUPE below. */
+  CHAT_MESSAGE = 'CHAT_MESSAGE',
+
+  // --- money --------------------------------------------------------------
+  /** A provider top-up cleared. `meta` carries amount and provider. */
+  TOPUP_SUCCEEDED = 'TOPUP_SUCCEEDED',
+  TOPUP_FAILED = 'TOPUP_FAILED',
+  /** A promotion or VIP placement was charged. `meta` carries the tariff. */
+  TARIFF_PAID = 'TARIFF_PAID',
+  /** It is about to lapse — the one money event worth acting on in advance. */
+  TARIFF_EXPIRING = 'TARIFF_EXPIRING',
 }
+
+/**
+ * Kinds whose rows are collapsed per conversation rather than appended.
+ *
+ * Fifty messages in one thread is one claim on attention. The unique partial
+ * index uq_notifications_unread_conversation enforces this in the database
+ * too, so a race between two messages cannot produce two rows.
+ */
+export const CHAT_DEDUPE = true;
 
 /** One page of the inbox. */
 export const NOTIFICATIONS_PAGE = 30;

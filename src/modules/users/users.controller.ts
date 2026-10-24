@@ -47,8 +47,8 @@ export class UsersController {
   @ApiOkResponse({ type: UserSearchResponse })
   @ApiUnauthorizedResponse({ type: ErrorResponse })
   @Get()
-  search(@Query() query: UserSearchQueryDto) {
-    return this.users.searchUsers(query);
+  search(@CurrentUser() user: AuthUser, @Query() query: UserSearchQueryDto) {
+    return this.users.searchUsers(query, user.sub);
   }
 
   @ApiOperation({

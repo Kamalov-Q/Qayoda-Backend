@@ -12,6 +12,7 @@ import type { RawBodyRequest } from '@nestjs/common';
 import type { Request } from 'express';
 import { BunnyStreamService } from './bunny-stream.service';
 import { VideosService } from './videos.service';
+import { ListingVideosService } from '../listing-videos/listing-videos.service';
 import { BUNNY_WEBHOOK_STATUS } from './videos.constants';
 
 /** The three fields Bunny sends. Everything else in the body is ignored. */
@@ -45,6 +46,7 @@ export class VideosWebhookController {
   constructor(
     private readonly bunny: BunnyStreamService,
     private readonly videos: VideosService,
+    private readonly listingVideos: ListingVideosService,
   ) {}
 
   @Post()
@@ -77,7 +79,12 @@ export class VideosWebhookController {
     if (!interesting) return { ok: true };
 
     try {
-      await this.videos.finalize(guid);
+      // Bunny has one webhook URL per library, and two features upload into
+      // that library. The guid belongs to exactly one of them: the tour
+      // service says whether it recognised it, and only if it did not is
+      // this a reel. Neither has to know the other exists.
+      const wasTour = await this.listingVideos.finalize(guid);
+      if (!wasTour) await this.videos.finalize(guid);
     } catch (error) {
       // Swallowed on purpose — see rule 2 in the class comment.
       this.logger.error(

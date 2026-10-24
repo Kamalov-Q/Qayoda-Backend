@@ -1,3 +1,4 @@
+import { InboxModule } from '../notifications/inbox.module';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
@@ -18,6 +19,7 @@ import {
  */
 @Module({
   imports: [
+    InboxModule,
     TypeOrmModule.forFeature([ListingReview, Listing, User]),
     AuthModule,
   ],

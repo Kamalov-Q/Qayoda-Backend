@@ -14,7 +14,8 @@ import {
 import { Listing } from '../listings/entities/listing.entity';
 import { User } from '../users/entities/user.entity';
 import { Tariff } from '../billing/entities/tariff.entity';
-import { BunnyStreamService } from './bunny-stream.service';
+import { BunnyModule } from './bunny.module';
+import { ListingVideosModule } from '../listing-videos/listing-videos.module';
 import { VideosService } from './videos.service';
 import { VideoEngagementService } from './video-engagement.service';
 import { VideoCommentsService } from './video-comments.service';
@@ -56,6 +57,10 @@ import {
     ]),
     AuthModule,
     BillingModule,
+    BunnyModule,
+    // For the shared Bunny webhook below, which has to be able to hand a
+    // guid to the tour feature as well. Strictly one-way.
+    ListingVideosModule,
     // The inbox: a video going live, a like, a comment.
     InboxModule,
   ],
@@ -69,7 +74,6 @@ import {
     VideoReportsAdminController,
   ],
   providers: [
-    BunnyStreamService,
     VideosService,
     VideoEngagementService,
     VideoCommentsService,

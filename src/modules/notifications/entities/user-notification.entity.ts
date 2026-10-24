@@ -37,6 +37,21 @@ export class UserNotification {
   @Column({ name: 'video_id', type: 'uuid', nullable: true })
   videoId: string | null;
 
+  @Column({ name: 'listing_id', type: 'uuid', nullable: true })
+  listingId: string | null;
+
+  /** Chat: the thread, not the message. One unread row per conversation. */
+  @Column({ name: 'conversation_id', type: 'uuid', nullable: true })
+  conversationId: string | null;
+
+  /**
+   * Facts a money row prints and nothing joins to — an amount, a provider, a
+   * tariff name. A column each would be four that are null on every other
+   * kind.
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  meta: Record<string, unknown> | null;
+
   @Column({ name: 'comment_id', type: 'uuid', nullable: true })
   commentId: string | null;
 

@@ -4,6 +4,7 @@ import {
   PrimaryGeneratedColumn,
   Column,
   OneToMany,
+  OneToOne,
   CreateDateColumn,
   UpdateDateColumn,
   Index,
@@ -15,6 +16,7 @@ import {
   SellerType,
 } from '../enums/seller-type.enum';
 import { ListingImage } from './listing-image.entity';
+import { ListingVideo } from '../../listing-videos/entities/listing-video.entity';
 import { ListingOffer } from './listing-offer.entity';
 import type { GeoJsonPoint, GeoJsonPolygon } from '../types/geojson.type';
 
@@ -175,6 +177,17 @@ export class Listing {
   offers: ListingOffer[];
   @OneToMany(() => ListingImage, (i) => i.listing, { cascade: true })
   images: ListingImage[];
+
+  /**
+   * The walkthrough film, if this advert has one. At most one, ever.
+   *
+   * A relation rather than a lookup so that every place a listing is loaded
+   * with its images gets the video with them — it is a slide in the same
+   * gallery, and a second round trip for the first thing on the screen is
+   * the wrong shape.
+   */
+  @OneToOne(() => ListingVideo, (v) => v.listing)
+  video: ListingVideo | null;
 
   @CreateDateColumn({ name: 'created_at' }) createdAt: Date;
   @UpdateDateColumn({ name: 'updated_at' }) updatedAt: Date;

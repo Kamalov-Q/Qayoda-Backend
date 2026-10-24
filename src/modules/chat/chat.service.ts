@@ -10,6 +10,8 @@ import { ListingsFacade } from '../listings/listings.facade';
 import { UsersFacade } from '../users/users.facade';
 import { OutBoxService } from 'src/shared/events/outbox.service';
 import { BlocksService } from '../blocks/blocks.service';
+import { UserNotificationsService } from '../notifications/user-notifications.service';
+import { NotificationKind } from '../notifications/notifications.constants';
 import { DataSource } from 'typeorm';
 import { SendMessageDto } from './dto/send-message.dto';
 import { Conversation } from './entities/conversation.entity';
@@ -31,6 +33,7 @@ export class ChatService {
     private readonly outbox: OutBoxService,
     private readonly blocks: BlocksService,
     private readonly dataSource: DataSource,
+    private readonly notifications: UserNotificationsService,
   ) {}
 
   async startConversation(
@@ -234,6 +237,20 @@ export class ChatService {
       );
 
       return message;
+    });
+
+    // Outside the transaction: a notification that fails to write must not
+    // roll back the message it is about. notify() swallows its own errors
+    // for the same reason.
+    //
+    // One row per conversation, not per message \u2014 the service collapses
+    // CHAT_MESSAGE onto the existing unread row, so a thread with fifty
+    // messages in it is one line in the inbox and one number on the bell.
+    await this.notifications.notify({
+      userId: recipientId,
+      actorId: senderId,
+      kind: NotificationKind.CHAT_MESSAGE,
+      conversationId,
     });
 
     return this.toMessageDto(saved);

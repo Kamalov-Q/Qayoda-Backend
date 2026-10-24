@@ -15,6 +15,12 @@ export class UserSearchItemResponse {
   @ApiProperty() isVerifiedRealtor!: boolean;
   @ApiProperty() followerCount!: number;
   @ApiProperty({ description: 'Live listings only.' }) listingCount!: number;
+
+  @ApiProperty({
+    description:
+      'Whether the viewer has blocked this person. Blocked people are NOT hidden from search \u2014 a block somebody can detect by searching is a hint, not a block, and being able to find someone is how you unblock them. The app marks the row instead.',
+  })
+  blockedByMe!: boolean;
 }
 
 export class UserSearchResponse {

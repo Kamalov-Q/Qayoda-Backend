@@ -13,6 +13,8 @@ import {
   ReviewsQueryDto,
   UpsertReviewDto,
 } from './dto/review.dto';
+import { UserNotificationsService } from '../notifications/user-notifications.service';
+import { NotificationKind } from '../notifications/notifications.constants';
 import { RatingService } from '../rating/rating.service';
 import { PRIOR } from '../rating/rating.constants';
 
@@ -32,6 +34,7 @@ export class ReviewsService {
     @InjectRepository(Listing) private readonly listings: Repository<Listing>,
     @InjectRepository(User) private readonly users: Repository<User>,
     private readonly rating: RatingService,
+    private readonly notifications: UserNotificationsService,
   ) {}
 
   /**
@@ -116,6 +119,19 @@ export class ReviewsService {
     );
 
     await this.recount(listingId);
+
+    // The owner hears about it. An EDIT is deliberately as loud as a first
+    // review: a rating revised from five stars to one is the version worth
+    // knowing about, and suppressing it would hide exactly the change that
+    // matters. notify() still drops it if the owner somehow is the author,
+    // though upsert refuses that case above.
+    await this.notifications.notify({
+      userId: listing.ownerId,
+      actorId: authorId,
+      kind: NotificationKind.LISTING_REVIEW,
+      listingId,
+      meta: { rating: dto.rating },
+    });
 
     const saved = await this.reviews.findOneByOrFail({ listingId, authorId });
     return this.shape(saved, null);

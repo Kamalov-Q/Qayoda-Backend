@@ -15,14 +15,14 @@ export class ListingRepository extends Repository<Listing> {
   findWithRelations(id: string) {
     return this.findOne({
       where: { id },
-      relations: { offers: true, images: true },
+      relations: { offers: true, images: true, video: true },
     });
   }
 
   findMine(ownerId: string, limit?: number, offset?: number) {
     return this.find({
       where: { ownerId },
-      relations: { offers: true, images: true },
+      relations: { offers: true, images: true, video: true },
       order: { createdAt: 'DESC' },
       ...(limit ? { take: limit, skip: offset ?? 0 } : {}),
     });
@@ -142,7 +142,7 @@ export class ListingRepository extends Repository<Listing> {
 
     const items = await this.find({
       where: { id: In(ids) },
-      relations: { offers: true, images: true },
+      relations: { offers: true, images: true, video: true },
     });
     const byId = new Map(items.map((l) => [l.id, l]));
 
@@ -184,7 +184,7 @@ export class ListingRepository extends Repository<Listing> {
 
     const listings = await this.find({
       where: { id: In(ids) },
-      relations: { offers: true, images: true },
+      relations: { offers: true, images: true, video: true },
     });
     // find() ignores the KNN order — restore it.
     const rank = new Map(ids.map((id, i) => [id, i]));
@@ -195,7 +195,7 @@ export class ListingRepository extends Repository<Listing> {
   findLatest(limit: number) {
     return this.find({
       where: { status: ListingStatus.ACTIVE },
-      relations: { offers: true, images: true },
+      relations: { offers: true, images: true, video: true },
       order: { publishedAt: 'DESC' },
       take: limit,
     });
