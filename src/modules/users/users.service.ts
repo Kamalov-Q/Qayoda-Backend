@@ -16,8 +16,6 @@ import { UserCardResponse } from './responses/user-card.response';
 import type { UserSearchQueryDto } from './dto/user-search.query.dto';
 import type { UserSearchResponse } from './responses/user-search.response';
 import { likeContains, searchTerm } from '../../shared/search/like';
-import { UserStatus } from '../../shared/enums';
-import { ListingStatus } from '../listings/enums/listing-status.enum';
 import {
   ageFrom,
   type SocialLinks,
@@ -325,83 +323,93 @@ export class UsersService {
     viewerId: string,
   ): Promise<UserSearchResponse> {
     const term = searchTerm(query.q);
-    // Below the floor this is not a search \u2014 see MIN_SEARCH_LENGTH. An
-    // empty page rather than an error: the client asks as you type, and one
-    // character is a question still being written, not a bad request.
-    if (!term) return { total: 0, items: [] };
-
     const limit = query.limit ?? 25;
     const offset = query.offset ?? 0;
-    const pattern = likeContains(term);
 
-    const qb = this.users
-      .createQueryBuilder('u')
-      .where('u.deleted_at IS NULL')
-      .andWhere('u.status = :active', { active: UserStatus.ACTIVE })
-      .andWhere(
-        `(u.name ILIKE :pattern
-       OR u.surname ILIKE :pattern
-       OR (coalesce(u.name, '') || ' ' || coalesce(u.surname, '')) ILIKE :pattern)`,
-        { pattern },
-      );
+    /**
+     * SELLERS, not every account.
+     *
+     * The inner join against live-listing counts is what makes this a
+     * directory rather than a user dump: somebody who has never posted is
+     * not a seller, and a list of them is not worth a screen. It also
+     * produces the count each row prints, so the page costs one query
+     * instead of one plus a second pass for the numbers.
+     *
+     * Ordered busiest-first because that is the question the screen answers
+     * — "who actually trades here" — with verified agencies ahead of the
+     * rest, and the id as a stable tie-break so paging cannot repeat a row.
+     */
+    const params: unknown[] = [limit, offset];
+    let nameFilter = '';
+    if (term) {
+      params.push(likeContains(term));
+      nameFilter = `AND (u.name ILIKE $3
+                      OR u.surname ILIKE $3
+                      OR (coalesce(u.name, '') || ' ' || coalesce(u.surname, ''))
+                         ILIKE $3)`;
+    }
 
-    const [people, total] = await qb
-      .select([
-        'u.id',
-        'u.name',
-        'u.surname',
-        'u.avatarThumbUrl',
-        'u.isVerifiedRealtor',
-        'u.followerCount',
-      ])
-      // Verified realtors first, then by reach: a name search in a market
-      // this size returns a handful of people, and the one worth showing
-      // first is the one most likely to be the agency being looked for.
-      // Property names, like the select above. Raw column names work too —
-      // TypeORM passes them through — but then renaming a column in the
-      // entity updates the select and silently breaks the order.
-      .orderBy('u.isVerifiedRealtor', 'DESC')
-      .addOrderBy('u.followerCount', 'DESC')
-      // A stable tie-break, or the same page can return the same row twice
-      // across two requests with equal counts.
-      .addOrderBy('u.id', 'ASC')
-      .limit(limit)
-      .offset(offset)
-      .getManyAndCount();
+    const rows = await this.users.query<
+      {
+        id: string;
+        name: string | null;
+        surname: string | null;
+        avatar_thumb_url: string | null;
+        is_verified_realtor: boolean;
+        follower_count: number;
+        listing_count: number;
+        total: string;
+      }[]
+    >(
+      `WITH sellers AS (
+         SELECT owner_id, count(*)::int AS n
+           FROM listings
+          WHERE status = 'ACTIVE'
+          GROUP BY owner_id
+       )
+       SELECT u.id,
+              u.name,
+              u.surname,
+              u.avatar_thumb_url,
+              u.is_verified_realtor,
+              u.follower_count,
+              s.n AS listing_count,
+              count(*) OVER () AS total
+         FROM users u
+         JOIN sellers s ON s.owner_id = u.id
+        WHERE u.deleted_at IS NULL
+          AND u.status = 'ACTIVE'
+          ${nameFilter}
+        ORDER BY u.is_verified_realtor DESC, s.n DESC, u.id ASC
+        LIMIT $1 OFFSET $2`,
+      params,
+    );
 
-    const ids = people.map((u) => u.id);
-    const [counts, blocked] = await Promise.all([
-      this.liveListingCounts(ids),
-      this.blocks.blockedSet(viewerId, ids),
-    ]);
+    if (!rows.length) return { total: 0, items: [] };
+
+    // Blocked people stay in the list, marked. Hiding them would make a
+    // block detectable by its own absence and leave no way to find somebody
+    // in order to unblock them.
+    const blocked = await this.blocks.blockedSet(
+      viewerId,
+      rows.map((r) => r.id),
+    );
 
     return {
-      total,
-      items: people.map((u) => ({
-        id: u.id,
-        name: u.name,
-        surname: u.surname,
-        avatarThumbUrl: u.avatarThumbUrl,
-        isVerifiedRealtor: u.isVerifiedRealtor,
-        followerCount: u.followerCount,
-        listingCount: counts.get(u.id) ?? 0,
-        blockedByMe: blocked.has(u.id),
+      // count(*) OVER () is the total before LIMIT — the same number for
+      // every row, so reading it off the first is correct and free.
+      total: Number(rows[0].total),
+      items: rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        surname: r.surname,
+        avatarThumbUrl: r.avatar_thumb_url,
+        isVerifiedRealtor: r.is_verified_realtor,
+        followerCount: r.follower_count,
+        listingCount: r.listing_count,
+        blockedByMe: blocked.has(r.id),
       })),
     };
-  }
-
-  /** Live listings per owner, for a page of search results. One query. */
-  private async liveListingCounts(ids: string[]): Promise<Map<string, number>> {
-    if (!ids.length) return new Map();
-
-    const rows = await this.users.query<{ owner_id: string; n: number }[]>(
-      `SELECT owner_id, count(*)::int AS n
-         FROM listings
-        WHERE owner_id = ANY($1) AND status = $2
-        GROUP BY owner_id`,
-      [ids, ListingStatus.ACTIVE],
-    );
-    return new Map(rows.map((r) => [r.owner_id, r.n]));
   }
 
   private async findOrFail(userId: string): Promise<User> {
