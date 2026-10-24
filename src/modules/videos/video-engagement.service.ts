@@ -1,8 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Video } from './entities/video.entity';
 import { VideoView } from './entities/video-view.entity';
+import { VideoLiveGateway } from '../live/video-live.gateway';
+import { UserNotificationsService } from '../notifications/user-notifications.service';
+import { NotificationKind } from '../notifications/notifications.constants';
 import { VideoStatus, VIEW_MIN_WATCH_MS } from './videos.constants';
 import type { ReportViewsDto } from './dto/video.dto';
 
@@ -27,6 +30,8 @@ export class VideoEngagementService {
   constructor(
     @InjectRepository(Video) private readonly videos: Repository<Video>,
     @InjectRepository(VideoView) private readonly views: Repository<VideoView>,
+    private readonly live: VideoLiveGateway,
+    private readonly notifications: UserNotificationsService,
   ) {}
 
   /**
@@ -71,7 +76,30 @@ export class VideoEngagementService {
       [videoId, userId],
     );
 
-    return { liked, likeCount: rows[0]?.like_count ?? 0 };
+    const likeCount = rows[0]?.like_count ?? 0;
+
+    // Everyone looking at this reel sees the number move, not just the
+    // person who tapped. Sent unconditionally: the statement above answers
+    // with the count as it now stands, so a repeat tap simply broadcasts
+    // the same number to a room that is already showing it.
+    this.live.broadcast(videoId, { likeCount });
+
+    if (liked) {
+      const video = await this.videos.findOne({
+        where: { id: videoId },
+        select: { id: true, authorId: true },
+      });
+      if (video) {
+        await this.notifications.notify({
+          userId: video.authorId,
+          actorId: userId,
+          kind: NotificationKind.VIDEO_LIKE,
+          videoId,
+        });
+      }
+    }
+
+    return { liked, likeCount };
   }
 
   /**
@@ -139,7 +167,22 @@ export class VideoEngagementService {
       [ids, durations, viewerKey, userId],
     );
 
-    return { counted: rows[0]?.counted ?? 0 };
+    const counted = rows[0]?.counted ?? 0;
+
+    // One broadcast for the batch rather than one per view: a page of reels
+    // reports several at once, and the room only cares about the one it is
+    // watching.
+    if (counted > 0) {
+      const fresh = await this.videos.find({
+        where: { id: In(ids) },
+        select: { id: true, viewCount: true },
+      });
+      for (const v of fresh) {
+        this.live.broadcast(v.id, { viewCount: v.viewCount });
+      }
+    }
+
+    return { counted };
   }
 
   private async mustBePublished(videoId: string): Promise<void> {

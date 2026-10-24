@@ -10,6 +10,8 @@ import { Follow } from './follow.entity';
 import { User } from '../users/entities/user.entity';
 import { UserStatus } from '../../shared/enums';
 import { BlocksService } from '../blocks/blocks.service';
+import { UserNotificationsService } from '../notifications/user-notifications.service';
+import { NotificationKind } from '../notifications/notifications.constants';
 import type { FollowListQueryDto } from './follows.dto';
 
 const DEFAULT_LIMIT = 25;
@@ -51,6 +53,7 @@ export class FollowsService {
     @InjectRepository(Follow) private readonly follows: Repository<Follow>,
     @InjectRepository(User) private readonly users: Repository<User>,
     private readonly blocks: BlocksService,
+    private readonly notifications: UserNotificationsService,
   ) {}
 
   /**
@@ -113,6 +116,15 @@ export class FollowsService {
     this.logger.log(
       `${followerId} ${next ? 'followed' : 'unfollowed'} ${followeeId}`,
     );
+
+    // Only the follow. Being unfollowed is not news anybody needs.
+    if (next) {
+      await this.notifications.notify({
+        userId: followeeId,
+        actorId: followerId,
+        kind: NotificationKind.NEW_FOLLOWER,
+      });
+    }
 
     return this.state(followerId, followeeId);
   }

@@ -1,18 +1,19 @@
 import { Global, Module } from '@nestjs/common';
 import { ListingLiveGateway } from './listing-live.gateway';
+import { VideoLiveGateway } from './video-live.gateway';
 
 /**
- * The public `/listings` socket, and nothing else.
+ * The two public sockets: `/listings` and `/videos`.
  *
- * A leaf on purpose: views, comments and ratings all push through it, and if
- * it lived inside any one of them the other two would have to import that
- * module to reach it. Global for the same reason BlocksModule is — four
- * modules broadcast, none of them should have to know where the socket lives
- * — and it owns no entities, so there is nothing here to import in a cycle.
+ * A leaf on purpose: views, comments, ratings and now a reel's counters all
+ * push through here, and if a gateway lived inside any one of those modules
+ * the rest would have to import it to reach the socket. Global for the same
+ * reason BlocksModule is, and it owns no entities, so there is nothing here
+ * to import in a cycle.
  */
 @Global()
 @Module({
-  providers: [ListingLiveGateway],
-  exports: [ListingLiveGateway],
+  providers: [ListingLiveGateway, VideoLiveGateway],
+  exports: [ListingLiveGateway, VideoLiveGateway],
 })
 export class LiveModule {}

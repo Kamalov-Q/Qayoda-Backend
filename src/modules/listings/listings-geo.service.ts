@@ -19,6 +19,8 @@ export interface ViewportPolygonFeature {
   /** Null for PIN listings — the client draws only the price bubble then. */
   geom: GeoJsonPolygon | null;
   centroid: GeoJsonPoint | null;
+  /** True when the listing has a published walkthrough. */
+  hasVideo?: boolean;
   title: string | null;
   rooms: number | null;
   areaM2: string | null;
@@ -30,6 +32,8 @@ export interface ViewportPolygonFeature {
 export interface ViewportPointFeature {
   listingId: string;
   centroid: GeoJsonPoint;
+  /** True when the listing has a published walkthrough. */
+  hasVideo: boolean;
   price: string;
   currency: string;
   thumbUrl: string | null;
@@ -105,7 +109,10 @@ export class ListingsGeoService {
     l.rooms,
     l.area_m2                        AS "areaM2",
     o.price, o.currency,
-    li.thumb_url                    AS "thumbUrl"
+    li.thumb_url                    AS "thumbUrl",
+    EXISTS (
+      SELECT 1 FROM videos v WHERE v.listing_id = l.id AND v.status = 'READY'
+    )                               AS "hasVideo"
   FROM listings l
   JOIN listing_offers o ON o.listing_id = l.id AND o.purpose = $1 AND o.is_active
   LEFT JOIN listing_images li ON li.listing_id = l.id AND li.is_primary
@@ -187,7 +194,15 @@ export class ListingsGeoService {
         listing_id                      AS "listingId",
         ST_AsGeoJSON(centroid)::json    AS centroid,
         price, currency,
-        thumb_url                       AS "thumbUrl"
+        thumb_url                       AS "thumbUrl",
+        -- Whether there is a walkthrough behind this pin. EXISTS rather than
+        -- a join: the answer is a boolean, the index on videos is partial to
+        -- READY rows, and a join would multiply the pin by its videos.
+        EXISTS (
+          SELECT 1 FROM videos v
+           WHERE v.listing_id = listing_map_points.listing_id
+             AND v.status = 'READY'
+        )                               AS "hasVideo"
       FROM listing_map_points
       WHERE purpose = $1
         AND ST_Intersects(centroid, ST_MakeEnvelope($2, $3, $4, $5, 4326))

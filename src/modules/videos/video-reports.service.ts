@@ -7,9 +7,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 import { VideoReport } from './entities/video-report.entity';
 import { Video } from './entities/video.entity';
+import { VideoComment } from './entities/video-comment.entity';
 import { User } from '../users/entities/user.entity';
 import { VideoStatus } from './videos.constants';
 import { UserRole } from '../../shared/enums';
@@ -39,9 +40,68 @@ export class VideoReportsService {
     @InjectRepository(VideoReport)
     private readonly reports: Repository<VideoReport>,
     @InjectRepository(Video) private readonly videos: Repository<Video>,
+    @InjectRepository(VideoComment)
+    private readonly comments: Repository<VideoComment>,
     @InjectRepository(User) private readonly users: Repository<User>,
     private readonly videosService: VideosService,
   ) {}
+
+  /**
+   * Flag a comment under a reel.
+   *
+   * The same queue, the same reasons: whoever reviews a video is the person
+   * who reviews what is written under it, and splitting them would mean two
+   * pages and two sets of buttons for one judgement.
+   */
+  async createForComment(
+    videoId: string,
+    commentId: string,
+    reporterId: string,
+    dto: CreateVideoReportDto,
+  ) {
+    const comment = await this.comments.findOne({
+      where: { id: commentId, videoId },
+      select: { id: true, authorId: true },
+    });
+    if (!comment) throw new NotFoundException('Comment not found');
+
+    if (comment.authorId === reporterId) {
+      throw new ForbiddenException({
+        code: 'OWN_COMMENT',
+        message: 'You cannot report your own comment',
+      });
+    }
+
+    if (dto.reason === 'OTHER' && !dto.comment) {
+      throw new BadRequestException({
+        code: 'COMMENT_REQUIRED',
+        message: 'A comment is required when the reason is OTHER',
+      });
+    }
+
+    try {
+      await this.reports.insert({
+        videoId,
+        commentId,
+        reporterId,
+        reason: dto.reason,
+        comment: dto.comment || null,
+      });
+    } catch (error) {
+      if ((error as { code?: string }).code === '23505') {
+        throw new ConflictException({
+          code: 'ALREADY_REPORTED',
+          message: 'You have already reported this comment',
+        });
+      }
+      throw error;
+    }
+
+    this.logger.log(
+      `Comment ${commentId} reported by ${reporterId}: ${dto.reason}`,
+    );
+    return { success: true };
+  }
 
   async create(videoId: string, reporterId: string, dto: CreateVideoReportDto) {
     const video = await this.videos.findOne({
@@ -137,6 +197,19 @@ export class VideoReportsService {
     const videoById = new Map(videos.map((v) => [v.id, v] as const));
     const reporterById = new Map(reporters.map((u) => [u.id, u] as const));
 
+    // Only for the rows that are about a comment, which is usually none of
+    // them — a moderator needs the words, not another join on every page.
+    const commentIds = rows
+      .map((r) => r.commentId)
+      .filter((id): id is string => !!id);
+    const comments = commentIds.length
+      ? await this.comments.find({
+          where: { id: In(commentIds) },
+          select: { id: true, body: true },
+        })
+      : [];
+    const commentById = new Map(comments.map((c) => [c.id, c] as const));
+
     return {
       total,
       limit: query.limit ?? DEFAULT_LIMIT,
@@ -152,6 +225,14 @@ export class VideoReportsService {
           status: r.status,
           resolutionNote: r.resolutionNote,
           createdAt: r.createdAt,
+          /** The flagged comment's text, when the report is about one. */
+          target: r.commentId
+            ? {
+                kind: 'COMMENT' as const,
+                commentId: r.commentId,
+                body: commentById.get(r.commentId)?.body ?? null,
+              }
+            : { kind: 'VIDEO' as const, commentId: null, body: null },
           video: {
             id: r.videoId,
             authorId: video?.authorId ?? null,
@@ -192,12 +273,18 @@ export class VideoReportsService {
     });
 
     if (dto.removeVideo) {
-      await this.videosService.remove(
-        report.videoId,
-        adminId,
-        UserRole.ADMIN,
-        dto.note ?? `Report upheld: ${report.reason}`,
-      );
+      // Whatever was flagged is what comes down. Upholding a complaint about
+      // one comment should never take the whole reel with it.
+      if (report.commentId) {
+        await this.comments.delete({ id: report.commentId });
+      } else {
+        await this.videosService.remove(
+          report.videoId,
+          adminId,
+          UserRole.ADMIN,
+          dto.note ?? `Report upheld: ${report.reason}`,
+        );
+      }
     }
 
     // Every other open complaint about this video is about the same clip, so
@@ -205,7 +292,13 @@ export class VideoReportsService {
     // queue filling with decisions that have already been made.
     if (dto.status === 'RESOLVED') {
       await this.reports.update(
-        { videoId: report.videoId, status: 'OPEN' },
+        {
+          videoId: report.videoId,
+          // The same TARGET, not just the same video: closing a complaint
+          // about one comment says nothing about a complaint about the clip.
+          commentId: report.commentId ?? IsNull(),
+          status: 'OPEN',
+        },
         {
           status: 'RESOLVED',
           resolvedBy: adminId,

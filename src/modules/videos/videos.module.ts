@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
 import { BillingModule } from '../billing/billing.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { Video } from './entities/video.entity';
 import { VideoLike } from './entities/video-like.entity';
 import { VideoView } from './entities/video-view.entity';
@@ -55,6 +56,8 @@ import {
     ]),
     AuthModule,
     BillingModule,
+    // The inbox: a video going live, a like, a comment.
+    NotificationsModule,
   ],
   controllers: [
     VideosController,

@@ -224,7 +224,6 @@ export class VideosController {
   ) {
     return this.reports.create(id, user.sub, dto);
   }
-
 }
 
 /**

@@ -11,8 +11,7 @@ import type { Server, Socket } from 'socket.io';
 /** `listing:<uuid>` — one room per listing being watched. */
 const roomFor = (listingId: string) => `listing:${listingId}`;
 
-const UUID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * The `listing:stats` payload. Every counter is optional — a broadcast says

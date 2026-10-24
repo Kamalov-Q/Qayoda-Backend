@@ -14,6 +14,9 @@ import { Video } from './entities/video.entity';
 import { User } from '../users/entities/user.entity';
 import { VideoStatus } from './videos.constants';
 import { UserRole } from '../../shared/enums';
+import { VideoLiveGateway } from '../live/video-live.gateway';
+import { UserNotificationsService } from '../notifications/user-notifications.service';
+import { NotificationKind } from '../notifications/notifications.constants';
 import {
   CreateVideoCommentDto,
   UpdateVideoCommentDto,
@@ -51,6 +54,8 @@ export class VideoCommentsService {
     @InjectRepository(Video) private readonly videos: Repository<Video>,
     @InjectRepository(User) private readonly users: Repository<User>,
     private readonly ds: DataSource,
+    private readonly live: VideoLiveGateway,
+    private readonly notifications: UserNotificationsService,
   ) {}
 
   /**
@@ -204,6 +209,43 @@ export class VideoCommentsService {
       return comment;
     });
 
+    // The count on the reel's rail, to everyone watching it — including the
+    // people who did not write this.
+    const video = await this.videos.findOne({
+      where: { id: videoId },
+      select: { id: true, authorId: true, commentCount: true },
+    });
+    if (video)
+      this.live.broadcast(videoId, { commentCount: video.commentCount });
+
+    // Two people can be owed a notification by one comment: whoever made the
+    // video, and whoever is being replied to. `notify` drops the one that is
+    // the author of the comment itself.
+    if (video) {
+      await this.notifications.notify({
+        userId: video.authorId,
+        actorId: authorId,
+        kind: NotificationKind.VIDEO_COMMENT,
+        videoId,
+        commentId: saved.id,
+      });
+    }
+    if (dto.parentId) {
+      const parent = await this.comments.findOne({
+        where: { id: dto.parentId },
+        select: { id: true, authorId: true },
+      });
+      if (parent) {
+        await this.notifications.notify({
+          userId: parent.authorId,
+          actorId: authorId,
+          kind: NotificationKind.COMMENT_REPLY,
+          videoId,
+          commentId: saved.id,
+        });
+      }
+    }
+
     const authors = await this.authorMap([authorId]);
     return this.shape(saved, authors, new Set());
   }
@@ -294,6 +336,16 @@ export class VideoCommentsService {
         );
       }
     });
+
+    // The rail's number, to everyone watching the reel — a deletion moves it
+    // by more than one when a top-level comment takes its replies along.
+    const after = await this.videos.findOne({
+      where: { id: videoId },
+      select: { id: true, commentCount: true },
+    });
+    if (after) {
+      this.live.broadcast(videoId, { commentCount: after.commentCount });
+    }
 
     return { success: true };
   }

@@ -27,6 +27,8 @@ import { ListingStatus } from '../listings/enums/listing-status.enum';
 import { User } from '../users/entities/user.entity';
 import { Tariff } from '../billing/entities/tariff.entity';
 import { WalletService } from '../billing/wallet.service';
+import { UserNotificationsService } from '../notifications/user-notifications.service';
+import { NotificationKind } from '../notifications/notifications.constants';
 import { UserRole } from '../../shared/enums';
 import {
   CreateUploadTicketDto,
@@ -116,6 +118,7 @@ export class VideosService {
     private readonly ds: DataSource,
     private readonly bunny: BunnyStreamService,
     private readonly wallet: WalletService,
+    private readonly notifications: UserNotificationsService,
   ) {}
 
   // ---- Posting ----------------------------------------------------------
@@ -279,6 +282,13 @@ export class VideosService {
         });
       });
       this.logger.log(`Video ${video.id} published (${remote.length}s)`);
+      // The author is not watching this happen — encoding takes a minute and
+      // the phone has moved on. This is the only way they learn.
+      await this.notifications.notify({
+        userId: video.authorId,
+        kind: NotificationKind.VIDEO_READY,
+        videoId: video.id,
+      });
     } catch (error) {
       if (!this.isInsufficientFunds(error)) throw error;
 
@@ -289,6 +299,11 @@ export class VideosService {
       this.logger.warn(
         `Video ${video.id} awaiting payment: ${video.authorId} cannot cover VIDEO_POST`,
       );
+      await this.notifications.notify({
+        userId: video.authorId,
+        kind: NotificationKind.VIDEO_AWAITING_PAYMENT,
+        videoId: video.id,
+      });
     }
   }
 
@@ -654,6 +669,13 @@ export class VideosService {
     await this.videos.update(video.id, {
       status: VideoStatus.FAILED,
       failReason: reason,
+    });
+    // Nothing was charged, but something was expected: an upload that
+    // vanishes without a word is indistinguishable from an app that lost it.
+    await this.notifications.notify({
+      userId: video.authorId,
+      kind: NotificationKind.VIDEO_FAILED,
+      videoId: video.id,
     });
     // Nothing was charged, so there is nothing to keep: the file is deleted
     // immediately rather than waiting for the retention sweep.

@@ -5,6 +5,7 @@ import { Follow } from './follow.entity';
 import { User } from '../users/entities/user.entity';
 import { FollowsService } from './follows.service';
 import { FollowsController } from './follows.controller';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 /**
  * Following people. BlocksService comes from the global BlocksModule, and the
@@ -13,7 +14,12 @@ import { FollowsController } from './follows.controller';
  * its service.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([Follow, User]), AuthModule],
+  imports: [
+    TypeOrmModule.forFeature([Follow, User]),
+    AuthModule,
+    // "X started following you" is the only thing a follow announces.
+    NotificationsModule,
+  ],
   controllers: [FollowsController],
   providers: [FollowsService],
   exports: [FollowsService],

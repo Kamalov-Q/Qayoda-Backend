@@ -51,27 +51,29 @@ export type OtpPurpose = 'login' | 'reset';
  * Cyrillic is UCS-2 (70 per SMS), so both Russian texts cost two — as
  * moderated, and not something a shorter wording here may "fix".
  */
-const OTP_TEMPLATES: Record<OtpPurpose, Record<Lang, (code: string) => string>> =
-  {
-    // Rows 95587 (uz) and 95588 (ru).
-    login: {
-      // 85 characters — one SMS.
-      uz: (code) =>
-        `Growen City ilovasiga kirish uchun tasdiqlash kodi: ${code}. Kodni hech kimga bermang.`,
-      // 91 characters — two SMS.
-      ru: (code) =>
-        `Код подтверждения для входа в приложение Growen City: ${code}. Никому не сообщайте этот код.`,
-    },
-    // Rows 95589 (uz) and 95590 (ru).
-    reset: {
-      // 77 characters — one SMS.
-      uz: (code) =>
-        `Growen City ilovasida parolni tiklash kodi: ${code}. Kodni hech kimga bermang.`,
-      // 85 characters — two SMS.
-      ru: (code) =>
-        `Код для сброса пароля в приложении Growen City: ${code}. Никому не сообщайте этот код.`,
-    },
-  };
+const OTP_TEMPLATES: Record<
+  OtpPurpose,
+  Record<Lang, (code: string) => string>
+> = {
+  // Rows 95587 (uz) and 95588 (ru).
+  login: {
+    // 85 characters — one SMS.
+    uz: (code) =>
+      `Growen City ilovasiga kirish uchun tasdiqlash kodi: ${code}. Kodni hech kimga bermang.`,
+    // 91 characters — two SMS.
+    ru: (code) =>
+      `Код подтверждения для входа в приложение Growen City: ${code}. Никому не сообщайте этот код.`,
+  },
+  // Rows 95589 (uz) and 95590 (ru).
+  reset: {
+    // 77 characters — one SMS.
+    uz: (code) =>
+      `Growen City ilovasida parolni tiklash kodi: ${code}. Kodni hech kimga bermang.`,
+    // 85 characters — two SMS.
+    ru: (code) =>
+      `Код для сброса пароля в приложении Growen City: ${code}. Никому не сообщайте этот код.`,
+  },
+};
 
 /** Eskiz's refusal for a text that has not passed moderation. */
 class TemplateNotApprovedError extends Error {}

@@ -18,6 +18,8 @@ import { PhoneRequiredGuard } from '../auth/guards/phone-required.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthUser } from '../auth/types/auth-user.type';
 import { VideoCommentsService } from './video-comments.service';
+import { VideoReportsService } from './video-reports.service';
+import { CreateVideoReportDto } from './dto/video-report.dto';
 import {
   CreateVideoCommentDto,
   UpdateVideoCommentDto,
@@ -27,7 +29,10 @@ import {
 @ApiTags('Videos')
 @Controller('videos/:id/comments')
 export class VideoCommentsController {
-  constructor(private readonly comments: VideoCommentsService) {}
+  constructor(
+    private readonly comments: VideoCommentsService,
+    private readonly reports: VideoReportsService,
+  ) {}
 
   @ApiOperation({
     summary: 'The comments under a video',
@@ -106,6 +111,23 @@ export class VideoCommentsController {
     @Param('commentId', ParseUUIDPipe) commentId: string,
   ) {
     return this.comments.remove(id, commentId, user.sub, user.role);
+  }
+
+  @ApiOperation({
+    summary: 'Report a comment',
+    description:
+      'One report per person per comment (409 ALREADY_REPORTED on the second). Lands in the same queue as video reports, because it is the same judgement by the same moderator. Reporting your own is refused — you can delete it.',
+  })
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAccessGuard, PhoneRequiredGuard)
+  @Post(':commentId/report')
+  report(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('commentId', ParseUUIDPipe) commentId: string,
+    @Body() dto: CreateVideoReportDto,
+  ) {
+    return this.reports.createForComment(id, commentId, user.sub, dto);
   }
 
   @ApiOperation({ summary: 'Like a comment', description: 'Idempotent.' })
