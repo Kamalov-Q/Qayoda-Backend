@@ -8,6 +8,7 @@ import { throttlerConfig } from './shared/security/throttler.config';
 import { EventsModule } from './shared/events/events.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { InboxModule } from './modules/notifications/inbox.module';
 import { ListingsModule } from './modules/listings/listings.module';
 import { MediaModule } from './modules/media/media.module';
 import { ChatModule } from './modules/chat/chat.module';
@@ -38,6 +39,7 @@ import { HealthModule } from './modules/health/health.module';
     EventsModule,
     AuthModule,
     NotificationsModule,
+    InboxModule,
     ListingsModule,
     MediaModule,
     ChatModule,
