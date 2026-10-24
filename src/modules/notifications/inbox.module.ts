@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserNotification } from './entities/user-notification.entity';
+import { Listing } from '../listings/entities/listing.entity';
+import { PushToken } from './entities/push-token.entity';
+import { ExpoPushService } from './expo-push.service';
 import { UserNotificationsService } from './user-notifications.service';
 import { UserNotificationsController } from './user-notifications.controller';
 import { User } from '../users/entities/user.entity';
@@ -23,11 +26,11 @@ import { AuthModule } from '../auth/auth.module';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([UserNotification, User, Video]),
+    TypeOrmModule.forFeature([UserNotification, User, Video, Listing, PushToken]),
     AuthModule,
   ],
   controllers: [UserNotificationsController],
-  providers: [UserNotificationsService],
-  exports: [UserNotificationsService],
+  providers: [UserNotificationsService, ExpoPushService],
+  exports: [UserNotificationsService, ExpoPushService],
 })
 export class InboxModule {}

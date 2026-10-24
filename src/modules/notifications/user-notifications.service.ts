@@ -9,6 +9,9 @@ import {
 } from './notifications.constants';
 import { User } from '../users/entities/user.entity';
 import { Video } from '../videos/entities/video.entity';
+import { Listing } from '../listings/entities/listing.entity';
+import { ExpoPushService } from './expo-push.service';
+import { PUSH_TEXT } from './push-text';
 
 export interface NotifyInput {
   /** Who is being told. */
@@ -43,7 +46,37 @@ export class UserNotificationsService {
     private readonly notifications: Repository<UserNotification>,
     @InjectRepository(User) private readonly users: Repository<User>,
     @InjectRepository(Video) private readonly videos: Repository<Video>,
+    @InjectRepository(Listing) private readonly listings: Repository<Listing>,
+    private readonly push: ExpoPushService,
   ) {}
+
+  /**
+   * The push that mirrors a row we just wrote.
+   *
+   * Fire-and-forget, and deliberately NOT awaited by notify(): the inbox is
+   * the source of truth and a device that cannot be reached must not slow
+   * down — or fail — the thing that caused the notification. The bell picks
+   * it up on the next poll either way.
+   *
+   * `data` carries the same references the row does, so a tap from the lock
+   * screen lands exactly where a tap in the inbox would.
+   */
+  private pushFor(input: NotifyInput): void {
+    const text = PUSH_TEXT[input.kind];
+    if (!text) return;
+
+    void this.push.sendToUsers([input.userId], {
+      title: text.title,
+      body: text.body,
+      data: {
+        kind: input.kind,
+        actorId: input.actorId ?? null,
+        videoId: input.videoId ?? null,
+        listingId: input.listingId ?? null,
+        conversationId: input.conversationId ?? null,
+      },
+    });
+  }
 
   /**
    * Tell someone. Never throws, and never tells you about yourself — the
@@ -92,6 +125,7 @@ export class UserNotificationsService {
                          created_at = now()`,
           [input.userId, input.kind, input.actorId ?? null, input.conversationId],
         );
+        this.pushFor(input);
         return;
       }
 
@@ -110,6 +144,7 @@ export class UserNotificationsService {
           meta: input.meta ?? null,
         }),
       );
+      this.pushFor(input);
     } catch (error) {
       this.logger.warn(
         `Notification ${input.kind} for ${input.userId} not written: ${
@@ -139,6 +174,20 @@ export class UserNotificationsService {
         (id) => id && id !== input.actorId,
       );
       if (!recipients.length) return;
+
+      const text = PUSH_TEXT[input.kind];
+      if (text) {
+        void this.push.sendToUsers(recipients, {
+          title: text.title,
+          body: text.body,
+          data: {
+            kind: input.kind,
+            actorId: input.actorId ?? null,
+            videoId: input.videoId ?? null,
+            listingId: input.listingId ?? null,
+          },
+        });
+      }
 
       await this.notifications.insert(
         recipients.map((userId) => ({
@@ -171,8 +220,11 @@ export class UserNotificationsService {
 
     const actorIds = [...new Set(rows.map((r) => r.actorId).filter(Boolean))];
     const videoIds = [...new Set(rows.map((r) => r.videoId).filter(Boolean))];
+    const listingIds = [
+      ...new Set(rows.map((r) => r.listingId).filter(Boolean)),
+    ];
 
-    const [actors, videos] = await Promise.all([
+    const [actors, videos, listings] = await Promise.all([
       actorIds.length
         ? this.users.find({
             where: { id: In(actorIds as string[]) },
@@ -196,22 +248,40 @@ export class UserNotificationsService {
             },
           })
         : Promise.resolve<Video[]>([]),
+      // Just enough of the listing to say WHICH one. Not its images: a
+      // thumbnail would mean a join per row into a table this query has no
+      // other reason to touch, and the title is what the sentence needs.
+      listingIds.length
+        ? this.listings.find({
+            where: { id: In(listingIds as string[]) },
+            select: { id: true, title: true },
+          })
+        : Promise.resolve<Listing[]>([]),
     ]);
 
     const actorById = new Map(actors.map((a) => [a.id, a] as const));
     const videoById = new Map(videos.map((v) => [v.id, v] as const));
+    const listingById = new Map(listings.map((l) => [l.id, l] as const));
 
     return {
       total,
       items: rows.map((r) => {
         const actor = r.actorId ? actorById.get(r.actorId) : undefined;
         const video = r.videoId ? videoById.get(r.videoId) : undefined;
+        const listing = r.listingId
+          ? listingById.get(r.listingId)
+          : undefined;
 
         return {
           id: r.id,
           kind: r.kind,
           videoId: r.videoId,
           commentId: r.commentId,
+          listingId: r.listingId,
+          conversationId: r.conversationId,
+          // Amounts, providers, tariff names — printed by the row, joined to
+          // by nothing.
+          meta: r.meta,
           read: r.readAt != null,
           createdAt: r.createdAt.toISOString(),
           actor: actor
@@ -237,6 +307,8 @@ export class UserNotificationsService {
                   : null,
               }
             : null,
+          /** Which listing the comment, reply or review was on. */
+          listing: listing ? { id: listing.id, title: listing.title } : null,
         };
       }),
     };

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Post,
@@ -10,12 +11,47 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator';
+import {
+  IsArray,
+  IsIn,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthUser } from '../auth/types/auth-user.type';
 import { UserNotificationsService } from './user-notifications.service';
+import { ExpoPushService } from './expo-push.service';
 import { NOTIFICATIONS_PAGE } from './notifications.constants';
+
+export class RegisterPushTokenDto {
+  @ApiPropertyOptional({
+    description:
+      "The Expo push token, e.g. ExponentPushToken[xxx]. It is the device's identity — registering an existing one RE-POINTS it at the caller rather than adding a row, so a shared phone reaches whoever signed in last.",
+  })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
+  token!: string;
+
+  @ApiPropertyOptional({ enum: ['ios', 'android', 'web'] })
+  @IsIn(['ios', 'android', 'web'])
+  platform!: string;
+}
+
+export class UnregisterPushTokenDto {
+  @ApiPropertyOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
+  token!: string;
+}
 
 export class NotificationsQueryDto {
   @ApiPropertyOptional({ minimum: 1, maximum: NOTIFICATIONS_PAGE })
@@ -54,7 +90,10 @@ export class MarkReadDto {
 @Controller('me/notifications')
 @UseGuards(JwtAccessGuard)
 export class UserNotificationsController {
-  constructor(private readonly notifications: UserNotificationsService) {}
+  constructor(
+    private readonly notifications: UserNotificationsService,
+    private readonly push: ExpoPushService,
+  ) {}
 
   @ApiOperation({
     summary: 'Your notifications, newest first',
@@ -84,5 +123,33 @@ export class UserNotificationsController {
   @HttpCode(200)
   markRead(@CurrentUser() user: AuthUser, @Body() dto: MarkReadDto) {
     return this.notifications.markRead(user.sub, dto.ids);
+  }
+
+  @ApiOperation({
+    summary: 'Register this device for push',
+    description: [
+      'Idempotent, and called on every launch rather than only once: a token can be rotated by the OS, and the row carries a last-seen that is how dead installs get pruned.',
+      '',
+      'Registering a token that already exists RE-POINTS it at the caller. The token identifies the device, so on a shared phone the person who signed in last is who it should reach — two rows would send their messages to each other.',
+    ].join('\n'),
+  })
+  @Post('push-tokens')
+  @HttpCode(204)
+  async registerPush(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: RegisterPushTokenDto,
+  ): Promise<void> {
+    await this.push.register(user.sub, dto.token, dto.platform);
+  }
+
+  @ApiOperation({
+    summary: 'Stop pushing to this device',
+    description:
+      'Sign-out. Removes this one device, never the account\u2019s others — somebody signing out on a tablet still wants their phone to buzz.',
+  })
+  @Delete('push-tokens')
+  @HttpCode(204)
+  async unregisterPush(@Body() dto: UnregisterPushTokenDto): Promise<void> {
+    await this.push.unregister(dto.token);
   }
 }
