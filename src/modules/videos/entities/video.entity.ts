@@ -79,9 +79,14 @@ export class Video {
   thumbnailFile: string | null;
 
   /**
-   * Denormalised counters, all four maintained by VideoEngagementService and
-   * nothing else. The rows in video_likes / video_views / video_comments are
-   * the truth; these spare the feed four COUNT(*)s per video per page.
+   * Denormalised counters, all three maintained by VideoEngagementService
+   * and VideoCommentsService and nothing else. The rows in video_likes /
+   * video_views / video_comments are the truth; these spare the feed three
+   * COUNT(*)s per video per page.
+   *
+   * There was a fourth, share_count. Nothing counts a share any more: the
+   * native sheet never says whether anything was actually sent, so the
+   * number measured intent and was read as reach.
    *
    * Written with `UPDATE … SET x = x + 1`, which is correct but serialises on
    * one row. That is fine at this size and is the thing to move to Redis if a
@@ -90,7 +95,6 @@ export class Video {
   @Column({ name: 'like_count', type: 'int', default: 0 }) likeCount: number;
   @Column({ name: 'comment_count', type: 'int', default: 0 })
   commentCount: number;
-  @Column({ name: 'share_count', type: 'int', default: 0 }) shareCount: number;
   @Column({ name: 'view_count', type: 'int', default: 0 }) viewCount: number;
 
   /** When it went public, which is also when it was paid for. */

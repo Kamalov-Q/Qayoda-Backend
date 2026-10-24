@@ -16,6 +16,7 @@ import { VideoStatus } from './videos.constants';
 import { UserRole } from '../../shared/enums';
 import {
   CreateVideoCommentDto,
+  UpdateVideoCommentDto,
   VideoCommentsQueryDto,
 } from './dto/video-comment.dto';
 
@@ -153,6 +154,15 @@ export class VideoCommentsService {
   async create(videoId: string, authorId: string, dto: CreateVideoCommentDto) {
     await this.mustExist(videoId);
 
+    // A photo on its own is a comment; nothing at all is not.
+    const body = dto.body?.trim() ?? '';
+    if (!body && !dto.image) {
+      throw new BadRequestException({
+        code: 'COMMENT_EMPTY',
+        message: 'Write something, or attach a photo',
+      });
+    }
+
     if (dto.parentId) {
       const parent = await this.comments.findOneBy({ id: dto.parentId });
       if (!parent || parent.videoId !== videoId) {
@@ -174,7 +184,11 @@ export class VideoCommentsService {
           videoId,
           authorId,
           parentId: dto.parentId ?? null,
-          body: dto.body,
+          body,
+          imageUrl: dto.image?.url ?? null,
+          imageThumbUrl: dto.image?.thumbUrl ?? null,
+          imageWidth: dto.image?.width ?? null,
+          imageHeight: dto.image?.height ?? null,
         }),
       );
 
@@ -192,6 +206,40 @@ export class VideoCommentsService {
 
     const authors = await this.authorMap([authorId]);
     return this.shape(saved, authors, new Set());
+  }
+
+  /**
+   * Edit your own words.
+   *
+   * Words only. Swapping the photo under an edit would let a comment people
+   * have already replied to become a different comment entirely — the same
+   * rule the listing thread keeps.
+   */
+  async update(
+    videoId: string,
+    commentId: string,
+    userId: string,
+    dto: UpdateVideoCommentDto,
+  ) {
+    const comment = await this.comments.findOneBy({ id: commentId, videoId });
+    if (!comment) throw new NotFoundException('Comment not found');
+    if (comment.authorId !== userId) {
+      throw new ForbiddenException({
+        code: 'NOT_YOUR_COMMENT',
+        message: 'You can only edit your own comment',
+      });
+    }
+
+    const updatedAt = new Date();
+    await this.comments.update(commentId, { body: dto.body, updatedAt });
+
+    const authors = await this.authorMap([comment.authorId]);
+    const liked = await this.likedSet(userId, [commentId]);
+    return this.shape(
+      { ...comment, body: dto.body, updatedAt },
+      authors,
+      liked,
+    );
   }
 
   /**
@@ -307,6 +355,10 @@ export class VideoCommentsService {
       parentId: comment.parentId,
       authorId: comment.authorId,
       body: comment.body,
+      imageUrl: comment.imageUrl,
+      imageThumbUrl: comment.imageThumbUrl,
+      imageWidth: comment.imageWidth,
+      imageHeight: comment.imageHeight,
       likeCount: comment.likeCount,
       replyCount: comment.replyCount,
       likedByMe: liked.has(comment.id),

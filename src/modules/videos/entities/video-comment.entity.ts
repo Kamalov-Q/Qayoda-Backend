@@ -13,10 +13,9 @@ import {
  * points at a top-level comment and can never itself be replied to.
  *
  * Its own table rather than a `target_type` column on listing_comments. The
- * listing thread is moderated by the listing's owner, carries an optional
- * photo and is pushed over the /listings websocket; none of that is true
- * under a reel, where the author moderates, the body is text and the screen
- * polls. Merging the two is worth doing once a third kind of comment appears
+ * listing thread is moderated by the listing's owner and pushed over the
+ * /listings websocket; neither is true under a reel, where the author
+ * moderates and the sheet refetches. Merging the two is worth doing once a third kind of comment appears
  * — see the implementation guide.
  */
 @Entity('video_comments')
@@ -33,7 +32,28 @@ export class VideoComment {
   @Column({ name: 'parent_id', type: 'uuid', nullable: true })
   parentId: string | null;
 
-  @Column({ type: 'varchar', length: 1000 }) body: string;
+  /** May be empty when the comment is a photo — see `imageUrl`. */
+  @Column({ type: 'varchar', length: 1000, default: '' }) body: string;
+
+  /**
+   * One optional photo, uploaded through `POST /media/upload` before the
+   * comment is created. Stored as the returned URLs rather than as a
+   * relation: the media module already owns the file, and a comment only
+   * needs to know where it is. Same shape as a listing comment's photo, so
+   * the app renders both with one component.
+   */
+  @Column({ name: 'image_url', type: 'text', nullable: true })
+  imageUrl: string | null;
+
+  @Column({ name: 'image_thumb_url', type: 'text', nullable: true })
+  imageThumbUrl: string | null;
+
+  /** Kept so the thread can reserve the right space before the photo loads. */
+  @Column({ name: 'image_width', type: 'int', nullable: true })
+  imageWidth: number | null;
+
+  @Column({ name: 'image_height', type: 'int', nullable: true })
+  imageHeight: number | null;
 
   /** Maintained by the service — a thread is read far more than written. */
   @Column({ name: 'like_count', type: 'int', default: 0 }) likeCount: number;

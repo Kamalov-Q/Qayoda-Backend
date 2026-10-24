@@ -225,17 +225,6 @@ export class VideosController {
     return this.reports.create(id, user.sub, dto);
   }
 
-  @ApiOperation({
-    summary: 'Count a share',
-    description:
-      'Called when the share sheet opens, by guests too. Counted on intent: the native sheet never says whether anything was sent.',
-  })
-  @UseGuards(OptionalJwtGuard)
-  @Post(':id/share')
-  @HttpCode(200)
-  share(@Param('id', ParseUUIDPipe) id: string) {
-    return this.engagement.recordShare(id);
-  }
 }
 
 /**

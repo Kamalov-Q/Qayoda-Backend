@@ -72,7 +72,6 @@ export interface VideoResponse {
   embedUrl: string | null;
   likeCount: number;
   commentCount: number;
-  shareCount: number;
   viewCount: number;
   /** Always false for guests — a heart nobody can attribute is not filled. */
   likedByMe: boolean;
@@ -816,7 +815,6 @@ export class VideosService {
       embedUrl: this.bunny.embedUrl(v.providerId),
       likeCount: v.likeCount,
       commentCount: v.commentCount,
-      shareCount: v.shareCount,
       viewCount: v.viewCount,
       likedByMe: liked.has(v.id),
       publishedAt: v.publishedAt?.toISOString() ?? null,

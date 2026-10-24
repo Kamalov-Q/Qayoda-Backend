@@ -12,11 +12,11 @@ export interface LikeResult {
 }
 
 /**
- * Likes, views and shares — every counter on a video, in one place.
+ * Likes and views — both counters on a video, in one place.
  *
- * Deliberately one small service rather than three sprinkled through the
- * feature. All three are the same shape of problem (a row is the truth, a
- * column is the cache of it) and all three are the thing that has to move to
+ * Deliberately one small service rather than two sprinkled through the
+ * feature. Both are the same shape of problem (a row is the truth, a column
+ * is the cache of it) and both are the thing that has to move to
  * Redis the day a clip goes properly viral, because `UPDATE videos SET
  * like_count = like_count + 1` serialises every liker of that one video
  * behind one row lock. At a thousand users that is free; the point of the
@@ -140,25 +140,6 @@ export class VideoEngagementService {
     );
 
     return { counted: rows[0]?.counted ?? 0 };
-  }
-
-  /**
-   * Somebody opened the share sheet.
-   *
-   * Counted on intent, not on delivery: the native sheet never tells us
-   * whether anything was actually sent, and "times shared" is a vanity
-   * number either way. Not deduplicated for the same reason.
-   */
-  async recordShare(videoId: string): Promise<{ shareCount: number }> {
-    await this.mustBePublished(videoId);
-
-    const [rows]: [{ share_count: number }[], number] = await this.videos.query(
-      `UPDATE videos SET share_count = share_count + 1
-        WHERE id = $1
-       RETURNING share_count`,
-      [videoId],
-    );
-    return { shareCount: rows[0]?.share_count ?? 0 };
   }
 
   private async mustBePublished(videoId: string): Promise<void> {

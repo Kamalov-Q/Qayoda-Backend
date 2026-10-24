@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Put,
   Query,
@@ -19,6 +20,7 @@ import type { AuthUser } from '../auth/types/auth-user.type';
 import { VideoCommentsService } from './video-comments.service';
 import {
   CreateVideoCommentDto,
+  UpdateVideoCommentDto,
   VideoCommentsQueryDto,
 } from './dto/video-comment.dto';
 
@@ -71,6 +73,23 @@ export class VideoCommentsController {
     @Body() dto: CreateVideoCommentDto,
   ) {
     return this.comments.create(id, user.sub, dto);
+  }
+
+  @ApiOperation({
+    summary: 'Edit your own comment',
+    description:
+      'Author only — 403 NOT_YOUR_COMMENT for anyone else. The words, not the photo: a comment people have already replied to should not be able to become a different comment.',
+  })
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAccessGuard)
+  @Patch(':commentId')
+  update(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('commentId', ParseUUIDPipe) commentId: string,
+    @Body() dto: UpdateVideoCommentDto,
+  ) {
+    return this.comments.update(id, commentId, user.sub, dto);
   }
 
   @ApiOperation({
