@@ -7,6 +7,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { DataSource, IsNull, LessThan, MoreThan, Repository } from 'typeorm';
@@ -41,7 +42,46 @@ export class PhoneAuthService {
     private readonly identities: IdentityService,
     private readonly tokens: TokenService,
     private readonly eskiz: EskizService,
-  ) {}
+    config: ConfigService,
+  ) {
+    // Normalised once, at boot, so every comparison below is against the same
+    // digits the request arrives as.
+    const phone = config.get<string>('REVIEW_PHONE');
+    const code = config.get<string>('REVIEW_OTP_CODE');
+    this.reviewPhone = phone ? EskizService.normalizePhone(phone) : null;
+    this.reviewCode = code ?? null;
+
+    if (this.reviewPhone && this.reviewCode) {
+      this.logger.warn(
+        `Store-review sign-in is ENABLED for +${this.reviewPhone}. ` +
+          'Unset REVIEW_PHONE once the app is out of review.',
+      );
+    }
+  }
+
+  /**
+   * The one number that signs in with a fixed code, and that code.
+   *
+   * App Store and Play reviewers sit outside Uzbekistan and cannot receive
+   * the SMS this app authenticates with, so without a way in they reject the
+   * build as broken. This is that way in, and it is deliberately narrow:
+   *
+   *  - BOTH env vars must be set, or the branch does not exist at all;
+   *  - it matches exactly one number, which we own;
+   *  - no SMS is sent and no code row is written, so the Eskiz budget and
+   *    the per-number rate limits are untouched by it;
+   *  - every other number goes through the normal path, unchanged.
+   *
+   * Treat the pair as a password: it is a standing credential for one real
+   * account. Unset REVIEW_PHONE between review cycles.
+   */
+  private readonly reviewPhone: string | null;
+  private readonly reviewCode: string | null;
+
+  /** Is this the review number, with the bypass configured? */
+  private isReviewPhone(phone: string): boolean {
+    return this.reviewPhone !== null && phone === this.reviewPhone;
+  }
 
   /**
    * `purpose` only picks which moderated SMS text goes out — the code itself,
@@ -57,6 +97,15 @@ export class PhoneAuthService {
     purpose: OtpPurpose = 'login',
   ) {
     const phone = EskizService.normalizePhone(rawPhone);
+
+    // The reviewer's number: nothing to send and nothing to store, since the
+    // code is fixed. Returned before the rate limiters so a reviewer retrying
+    // during a session cannot lock themselves out of the app they are
+    // reviewing.
+    if (this.isReviewPhone(phone)) {
+      this.logger.log('Store-review OTP requested; no SMS sent');
+      return { sent: true, expiresIn: OTP_TTL_MS / 1000 };
+    }
 
     // Every SMS costs money, so these limits protect the balance as much as
     // the user. The controller's throttle is per IP, which one attacker with a
@@ -233,6 +282,14 @@ export class PhoneAuthService {
    * statement below is atomic on its own, which is all this needs.
    */
   private async consumeCode(phone: string, code: string): Promise<void> {
+    // Checked before the table, because requestOtp wrote no row for this
+    // number. A wrong code on the review number falls through to the normal
+    // path and fails there, as any other wrong code would.
+    if (this.isReviewPhone(phone) && code === this.reviewCode) {
+      this.logger.log('Store-review OTP accepted');
+      return;
+    }
+
     const row = await this.otps.findOne({
       where: { phone, consumedAt: IsNull() },
       order: { createdAt: 'DESC' },
