@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { BlocksService } from '../blocks/blocks.service';
+import { TokenService } from '../auth/services/token.service';
+import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
 import { RatingService } from '../rating/rating.service';
 import { OutBoxService } from 'src/shared/events/outbox.service';
 import { ListingsFacade } from '../listings/listings.facade';
@@ -34,6 +36,7 @@ export class UsersService {
     private readonly dataSource: DataSource,
     private readonly blocks: BlocksService,
     private readonly rating: RatingService,
+    private readonly tokens: TokenService,
   ) {}
 
   // ------------------------------------------------------------- own profile
@@ -410,6 +413,151 @@ export class UsersService {
         blockedByMe: blocked.has(r.id),
       })),
     };
+  }
+
+  // ----------------------------------------------------------- deletion
+
+  /**
+   * A user deleting their own account.
+   *
+   * Archive is this app's delete, and that holds here too: no row is dropped.
+   * What leaves is the person — every column that could name them is nulled,
+   * their listings and videos come down, and every way back in is revoked.
+   * What stays is the shape of what happened: a conversation the other side
+   * still needs to read, a review a listing's rating was computed from, a
+   * wallet row the accountant is required to keep.
+   *
+   * Listings go through the facade one at a time rather than in a single
+   * UPDATE, because `listing.archived` is what takes the pin off the map and
+   * clears the feed caches. A bulk write would leave the map advertising
+   * property belonging to an account that no longer exists.
+   *
+   * Outside the transaction on purpose: each archive opens its own, and
+   * nesting them under one outer transaction would hold a write lock across
+   * every listing the user ever posted.
+   */
+  async deleteOwnAccount(userId: string, reason?: string): Promise<void> {
+    await this.findOrFail(userId);
+
+    for (const listingId of await this.listings.liveIdsByOwner(userId)) {
+      await this.listings.archiveById(listingId);
+    }
+
+    await this.dataSource.transaction(async (manager) => {
+      await manager.query(
+        `UPDATE videos
+            SET status = 'REMOVED', updated_at = now()
+          WHERE author_id = $1 AND status <> 'REMOVED'`,
+        [userId],
+      );
+
+      // The device rows, not merely the tokens: a push delivered after this
+      // point would land on the phone of somebody who asked to be forgotten.
+      await manager.query('DELETE FROM push_tokens WHERE user_id = $1', [
+        userId,
+      ]);
+
+      // Passport scans and the selfie. The rows go here; the files behind
+      // the URLs are Bunny's and are swept by the media cleanup.
+      await manager.query(
+        'DELETE FROM verification_requests WHERE user_id = $1',
+        [userId],
+      );
+
+      // Saved listings and blocks are personal lists and nobody else reads
+      // them, so they leave with the account.
+      await manager.query('DELETE FROM listing_saves WHERE user_id = $1', [
+        userId,
+      ]);
+      await manager.query(
+        'DELETE FROM user_blocks WHERE blocker_id = $1 OR blocked_id = $1',
+        [userId],
+      );
+
+      // Follows carry denormalised counters on the OTHER user, maintained by
+      // FollowsService. Deleting the rows without these two updates leaves
+      // every profile this account touched advertising a follower it no
+      // longer has — and the count is drawn on the most visited screen in
+      // the app. GREATEST guards a counter that has already drifted below
+      // the row count; without it a drifted row would go negative.
+      await manager.query(
+        `UPDATE users u
+            SET follower_count = GREATEST(u.follower_count - 1, 0)
+           FROM follows f
+          WHERE f.follower_id = $1 AND u.id = f.followee_id`,
+        [userId],
+      );
+      await manager.query(
+        `UPDATE users u
+            SET following_count = GREATEST(u.following_count - 1, 0)
+           FROM follows f
+          WHERE f.followee_id = $1 AND u.id = f.follower_id`,
+        [userId],
+      );
+      await manager.query(
+        'DELETE FROM follows WHERE follower_id = $1 OR followee_id = $1',
+        [userId],
+      );
+
+      // Without this the next SMS sign-in from that number would match the
+      // identity row and hand the caller this dead account back.
+      await manager.query('DELETE FROM auth_identities WHERE user_id = $1', [
+        userId,
+      ]);
+
+      // Named columns, for the reason updateProfile gives.
+      const scrub: Partial<
+        Pick<
+          User,
+          | 'name'
+          | 'surname'
+          | 'avatarUrl'
+          | 'avatarThumbUrl'
+          | 'phoneNumber'
+          | 'email'
+          | 'passwordHash'
+          | 'birthDate'
+          | 'gender'
+          | 'address'
+          | 'bio'
+          | 'socialLinks'
+          | 'isOnline'
+          | 'followerCount'
+          | 'followingCount'
+          | 'deletedAt'
+          | 'deletedBy'
+          | 'deleteReason'
+        >
+      > = {
+        name: null,
+        surname: null,
+        avatarUrl: null,
+        avatarThumbUrl: null,
+        // Nulled rather than kept so the same person can sign up again: the
+        // unique index permits any number of NULLs, and leaving the number
+        // here would match them back onto this row forever.
+        phoneNumber: null,
+        email: null,
+        passwordHash: null,
+        birthDate: null,
+        gender: null,
+        address: null,
+        bio: null,
+        socialLinks: null,
+        isOnline: false,
+        followerCount: 0,
+        followingCount: 0,
+        deletedAt: new Date(),
+        deletedBy: userId,
+        deleteReason: reason ?? null,
+      };
+      await manager.update(User, userId, scrub);
+    });
+
+    // After the commit: a token revoked before it fails would log them out of
+    // an account that is still intact.
+    await this.tokens.revokeAllFor(userId);
+    JwtAccessGuard.invalidate(userId);
   }
 
   private async findOrFail(userId: string): Promise<User> {

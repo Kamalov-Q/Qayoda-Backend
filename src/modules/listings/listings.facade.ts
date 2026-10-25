@@ -1,5 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Not } from 'typeorm';
 import { ListingRepository } from './repositories/listing.repository';
+import { ListingStatus } from './enums/listing-status.enum';
 import {
   ListingsService,
   type OwnerListingsQuery,
@@ -56,6 +58,21 @@ export class ListingsFacade {
 
   findById(listingId: string) {
     return this.listingsService.findById(listingId);
+  }
+
+  /**
+   * Every listing of this owner that is not already down.
+   *
+   * Ids rather than entities, and archived ones filtered out here rather than
+   * by archive() being idempotent: the caller archives them one at a time to
+   * keep the map-point events, so the shorter the list the fewer round trips.
+   */
+  async liveIdsByOwner(ownerId: string): Promise<string[]> {
+    const rows = await this.listings.find({
+      where: { ownerId, status: Not(ListingStatus.ARCHIVED) },
+      select: { id: true },
+    });
+    return rows.map((row) => row.id);
   }
 
   async archiveById(listingId: string) {
