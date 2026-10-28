@@ -25,6 +25,7 @@ import { UpdateImagesDto } from './dto/update-images.dto';
 import { ListingSale } from './entities/listing-sale.entity';
 import { MarkSoldDto } from './dto/mark-sold.dto';
 import { OfferPurpose } from './enums/offer-purpose.enum';
+import { ListingOfferRepository } from './repositories/listing-offer.repository';
 import { ListingSaveRepository } from './repositories/listing-save.repository';
 import { CategoriesService } from '../categories/categories.service';
 import { AmenitiesService } from '../amenities/amenities.service';
@@ -45,6 +46,7 @@ export interface OwnerListingsQuery {
 export class ListingsService {
   constructor(
     private readonly listings: ListingRepository,
+    private readonly offers: ListingOfferRepository,
     private readonly saves: ListingSaveRepository,
     private readonly geo: ListingsGeoService,
     private readonly outbox: OutBoxService,
@@ -682,7 +684,7 @@ export class ListingsService {
       });
     }
 
-    const offer = this.saleOffer(listing, dto.purpose);
+    const offer = await this.saleOffer(listing, dto.purpose);
     // The currency the seller answered in, or — when they did not say — the
     // one the advert was quoted in, which is what the number in front of
     // them was denominated in.
@@ -774,8 +776,27 @@ export class ListingsService {
    * question. One offer: use it, and do not make the app ask. More than
    * one: the caller must say.
    */
-  private saleOffer(listing: Listing, purpose?: OfferPurpose): ListingOffer {
-    const live = (listing.offers ?? []).filter((o) => o.isActive);
+  private async saleOffer(
+    listing: Listing,
+    purpose?: OfferPurpose,
+  ): Promise<ListingOffer> {
+    // Loaded here rather than read off `listing.offers`.
+    //
+    // `req.listing` comes from ListingOwnershipGuard, which does a bare
+    // findOneBy with NO relations — so `listing.offers` is undefined on
+    // every owner-scoped route. Reading it made this throw
+    // LISTING_HAS_NO_OFFER for every listing, including ones plainly showing
+    // a price, which is exactly what happened the first time anybody pressed
+    // the button on a real phone.
+    //
+    // Fixed here instead of by widening the guard: that guard runs on edit,
+    // archive, promote, delete, images and video too, and making all of them
+    // hydrate offers to serve this one caller is a cost paid everywhere for
+    // a need in one place.
+    const live = await this.offers.findBy({
+      listingId: listing.id,
+      isActive: true,
+    });
 
     if (!live.length) {
       throw new BadRequestException({
