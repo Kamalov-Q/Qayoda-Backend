@@ -40,6 +40,9 @@ import { ListingVideoStatus } from '../listing-videos.constants';
 @Index('IDX_listing_videos_provider', ['providerId'], { unique: true })
 @Index('IDX_listing_videos_listing', ['listingId'], { unique: true })
 @Index('IDX_listing_videos_pending', ['status', 'updatedAt'])
+// owner_id carries a foreign key and had no index, so deleting a user meant
+// a full scan of this table. Same omission as the three on UserNotification.
+@Index('idx_listing_videos_owner', ['ownerId'])
 export class ListingVideo {
   @PrimaryGeneratedColumn('uuid') id: string;
 

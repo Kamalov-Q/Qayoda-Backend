@@ -45,6 +45,19 @@ import { NotificationKind } from '../notifications.constants';
 @Index('idx_notifications_listing', ['userId', 'listingId', 'kind'], {
   where: 'listing_id IS NOT NULL',
 })
+// The three below index foreign-key columns that had nothing on them.
+//
+// Postgres does NOT index the referencing side of a foreign key — only the
+// referenced side, by its primary key — so every delete of a user, video or
+// comment had to scan this whole table to find the rows pointing at it, once
+// per parent row removed. Partial, because the overwhelming majority of rows
+// are null on each: a like carries no comment, a listing review carries no
+// video.
+@Index('idx_notifications_actor', ['actorId'], { where: 'actor_id IS NOT NULL' })
+@Index('idx_notifications_video', ['videoId'], { where: 'video_id IS NOT NULL' })
+@Index('idx_notifications_comment', ['commentId'], {
+  where: 'comment_id IS NOT NULL',
+})
 export class UserNotification {
   @PrimaryGeneratedColumn('uuid') id: string;
 

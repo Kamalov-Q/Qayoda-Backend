@@ -39,7 +39,13 @@ CREATE TABLE IF NOT EXISTS listing_sales (
   asking_price      numeric(14,2),
   asking_currency   char(3),
   asking_price_usd  numeric(14,2),
-  sold_at           timestamptz    NOT NULL DEFAULT now()
+  -- No DEFAULT. The entity declares a plain column and the service always
+  -- sets this explicitly (a relisted listing selling again is an UPDATE, and
+  -- a create-timestamp would not fire on one). A default here that the
+  -- entity does not know about is schema drift: typeorm schema:log asks to
+  -- DROP it, and on a database where synchronize is on it would be dropped
+  -- without asking.
+  sold_at           timestamptz    NOT NULL
 );
 
 -- ADD CONSTRAINT has no IF NOT EXISTS, so it is guarded by name.
