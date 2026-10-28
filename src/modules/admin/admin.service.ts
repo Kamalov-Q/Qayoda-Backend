@@ -84,6 +84,19 @@ export class AdminService {
     return {
       usdToUzs: rate.usdToUzs,
       rateUpdatedAt: rate.updatedAt,
+      /**
+       * WHICH source that number came from.
+       *
+       * The settings page used to label it "Markaziy bank kursi" — the
+       * Central Bank's rate — unconditionally, which stopped being true the
+       * moment a second source existed. On the production droplet it was
+       * never true: cbu.uz does not answer foreign IPs, so the figure on
+       * screen was a hardcoded constant about 7% out, under a label saying
+       * it came from the central bank.
+       */
+      rateSource: rate.source,
+      /** True for anything that is not CBU's published figure. */
+      rateIsFallback: rate.isFallback,
       smsBalance,
       smsError,
       serverTime: new Date().toISOString(),
