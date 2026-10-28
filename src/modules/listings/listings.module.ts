@@ -5,6 +5,7 @@ import { Listing } from './entities/listing.entity';
 import { ListingOffer } from './entities/listing-offer.entity';
 import { ListingImage } from './entities/listing-image.entity';
 import { ListingMapPoint } from './entities/listing-map-point.entity';
+import { ListingSale } from './entities/listing-sale.entity';
 import { ListingSave } from './entities/listing-save.entity';
 import { ListingsMapController } from './listings-map.controller';
 import { ListingsController } from './listings.controller';
@@ -30,6 +31,7 @@ import { BillingModule } from '../billing/billing.module';
       ListingOffer,
       ListingImage,
       ListingMapPoint,
+      ListingSale,
       ListingSave,
     ]),
     AuthModule,

@@ -34,6 +34,21 @@ export enum NotificationKind {
   /** One row per CONVERSATION, not per message. See CHAT_DEDUPE below. */
   CHAT_MESSAGE = 'CHAT_MESSAGE',
 
+  // --- price bids ---------------------------------------------------------
+  //
+  // ⚠️ A client that predates these renders an unknown kind, and the inbox
+  // screen indexes a fixed map by kind. Ship the app update BEFORE anything
+  // starts emitting these — see sql/2026-10-28-price-bids.sql.
+  /** Somebody offered a price on your advert. `meta` carries the amount. */
+  PRICE_BID_RECEIVED = 'PRICE_BID_RECEIVED',
+  /** The seller answered with a number of their own. */
+  PRICE_BID_COUNTERED = 'PRICE_BID_COUNTERED',
+  /** Your bid was accepted. An agreement to proceed, not a sale. */
+  PRICE_BID_ACCEPTED = 'PRICE_BID_ACCEPTED',
+  PRICE_BID_DECLINED = 'PRICE_BID_DECLINED',
+  /** It stood for BID_TTL_DAYS and nobody answered. */
+  PRICE_BID_EXPIRED = 'PRICE_BID_EXPIRED',
+
   // --- money --------------------------------------------------------------
   /** A provider top-up cleared. `meta` carries amount and provider. */
   TOPUP_SUCCEEDED = 'TOPUP_SUCCEEDED',

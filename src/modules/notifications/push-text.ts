@@ -54,6 +54,26 @@ export const PUSH_TEXT: Partial<
     title: "To'lov kutilmoqda",
     body: 'Videongiz uchun hisobingizni to’ldiring',
   },
+  [NotificationKind.PRICE_BID_RECEIVED]: {
+    title: 'Narx taklifi',
+    body: "E'loningizga narx taklif qilindi",
+  },
+  [NotificationKind.PRICE_BID_COUNTERED]: {
+    title: 'Qarshi taklif',
+    body: 'Sotuvchi o’z narxini taklif qildi',
+  },
+  [NotificationKind.PRICE_BID_ACCEPTED]: {
+    title: 'Taklif qabul qilindi',
+    body: 'Narx taklifingiz qabul qilindi',
+  },
+  [NotificationKind.PRICE_BID_DECLINED]: {
+    title: 'Taklif rad etildi',
+    body: 'Narx taklifingiz rad etildi',
+  },
+  // Deliberately absent: PRICE_BID_EXPIRED. A bid lapsing is not worth
+  // waking a phone for — the inbox row is enough. See the comment above:
+  // a kind missing from here sends no push, and that is the mechanism.
+
   [NotificationKind.TOPUP_SUCCEEDED]: {
     title: "Hisob to'ldirildi",
     body: 'Balansingiz yangilandi',

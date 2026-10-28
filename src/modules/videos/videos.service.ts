@@ -8,7 +8,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, In, IsNull, Not, Repository } from 'typeorm';
 import { Video } from './entities/video.entity';
 import { VideoLike } from './entities/video-like.entity';
 import {
@@ -266,23 +266,60 @@ export class VideosService {
     };
 
     try {
-      await this.ds.transaction(async (manager) => {
+      const claimed = await this.ds.transaction(async (manager) => {
+        /**
+         * Claim the row FIRST, and only if nobody else already has.
+         *
+         * finalize() checks the status before calling this, but that check
+         * and this write are two separate statements — and Bunny fires
+         * status 3 and 4 for the same file, which the comment there already
+         * says. Both deliveries read UPLOADING, both passed the check, and
+         * both published: two "your video is live" rows for one upload, two
+         * charges, and two posts announced to every follower.
+         *
+         * A conditional UPDATE closes it. Postgres makes the second
+         * transaction wait on the row lock, then re-evaluates the WHERE
+         * against the committed state, finds READY and reports no rows
+         * affected — so exactly one delivery wins, whichever arrives first.
+         *
+         * Before the charge, not after: a claim taken out afterwards would
+         * still let both transactions bill the wallet before either noticed.
+         * If the charge then fails the whole transaction rolls back, which
+         * releases the claim as it should.
+         */
+        const publishedAt = new Date();
+        const claim = await manager.update(
+          Video,
+          {
+            id: video.id,
+            status: In([VideoStatus.UPLOADING, VideoStatus.AWAITING_PAYMENT]),
+          },
+          {
+            ...media,
+            status: VideoStatus.READY,
+            failReason: null,
+            publishedAt,
+            rankAt: this.rankFor(publishedAt, video.listingId),
+          },
+        );
+        if (!claim.affected) return false;
+
         await this.wallet.charge(
           manager,
           video.authorId,
           'VIDEO_POST',
           video.id,
         );
-
-        const publishedAt = new Date();
-        await manager.update(Video, video.id, {
-          ...media,
-          status: VideoStatus.READY,
-          failReason: null,
-          publishedAt,
-          rankAt: this.rankFor(publishedAt, video.listingId),
-        });
+        return true;
       });
+
+      if (!claimed) {
+        this.logger.log(
+          `Video ${video.id} already published; duplicate delivery ignored`,
+        );
+        return;
+      }
+
       this.logger.log(`Video ${video.id} published (${remote.length}s)`);
       // The author is not watching this happen — encoding takes a minute and
       // the phone has moved on. This is the only way they learn.
@@ -560,8 +597,24 @@ export class VideosService {
     const limit = q.limit ?? 20;
     const offset = q.offset ?? 0;
 
+    /**
+     * A video the AUTHOR deleted is gone from their shelf. One a MODERATOR
+     * took down stays, because they need to see that it happened and why.
+     *
+     * `removedBy` is the difference: it is set only when somebody other than
+     * the author removed it (see `remove`). Without this, deleting your own
+     * video left a row reading "Удалено" on the shelf for ever — the delete
+     * looked like it had failed, so people pressed it again.
+     *
+     * The row itself survives either way; a takedown is a decision that may
+     * have to be justified later, and a deleted row justifies nothing. This
+     * is only about whose list it appears on.
+     */
     const [rows, total] = await this.videos.findAndCount({
-      where: { authorId: userId },
+      where: [
+        { authorId: userId, status: Not(VideoStatus.REMOVED) },
+        { authorId: userId, status: VideoStatus.REMOVED, removedBy: Not(IsNull()) },
+      ],
       order: { createdAt: 'DESC' },
       take: limit,
       skip: offset,
@@ -890,8 +943,13 @@ export class VideosService {
       });
     }
     // A draft is fine — people film the flat and post the advert in one
-    // sitting — but an archived one is a listing nobody can open.
-    if (listing.status === ListingStatus.ARCHIVED) {
+    // sitting — but an archived or sold one is a listing nobody is looking
+    // for, and a walkthrough of a flat that has already gone is the clearest
+    // way to waste a viewer's time.
+    if (
+      listing.status === ListingStatus.ARCHIVED ||
+      listing.status === ListingStatus.SOLD
+    ) {
       throw new BadRequestException({
         code: 'LISTING_UNAVAILABLE',
         message: 'This listing is not available',

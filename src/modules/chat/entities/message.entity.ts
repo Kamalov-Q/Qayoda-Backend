@@ -56,6 +56,20 @@ export class Message {
   @Column({ name: 'reply_to_id', type: 'varchar', nullable: true })
   replyToId: string | null;
 
+  /**
+   * The price bid this message announces, or null on an ordinary message.
+   *
+   * A nullable reference rather than a new MessageType on purpose. The enum
+   * is what every shipped client switches on, and a value none of them knows
+   * renders as an empty bubble in every build already on a phone. A bid is
+   * therefore a TEXT message whose body reads as a sentence — older clients
+   * show that sentence, newer ones see this column and draw the card with
+   * its buttons. Nothing has to be upgraded for the thread to stay readable.
+   */
+  @Index('idx_messages_price_bid', { where: '"price_bid_id" IS NOT NULL' })
+  @Column({ name: 'price_bid_id', type: 'uuid', nullable: true })
+  priceBidId: string | null;
+
   // ---- forward provenance (null unless this message was forwarded) ----
   /** Who originally wrote it. Kept for linking through to their profile. */
   @Column({ name: 'forwarded_from_user_id', type: 'uuid', nullable: true })

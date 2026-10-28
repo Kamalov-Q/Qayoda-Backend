@@ -34,15 +34,19 @@ export class ProjectMapPointListener {
           await manager.query(
             `
           INSERT INTO listing_map_points
-            (listing_id, purpose, category, price, currency, price_usd, centroid, thumb_url, address, title, updated_at)
+            (listing_id, purpose, category, price, currency, price_usd, centroid, thumb_url, address, title, sold, updated_at)
           SELECT l.id,
                  o.purpose::text::listing_map_points_purpose_enum,
                  l.category,
-                 o.price, o.currency, o.price_usd, l.centroid, li.thumb_url, l.address, l.title, now()
+                 o.price, o.currency, o.price_usd, l.centroid, li.thumb_url, l.address, l.title,
+                 l.status = 'SOLD',
+                 now()
           FROM listings l
           JOIN listing_offers o ON o.listing_id = l.id AND o.is_active
           LEFT JOIN listing_images li ON li.listing_id = l.id AND li.is_primary
-          WHERE l.id = $1 AND l.status = 'ACTIVE' AND l.centroid IS NOT NULL
+          WHERE l.id = $1
+            AND l.status IN ('ACTIVE', 'SOLD')
+            AND l.centroid IS NOT NULL
           `,
             [payload.listingId],
           );
@@ -51,6 +55,15 @@ export class ProjectMapPointListener {
     );
   }
 
+  /**
+   * Off the map.
+   *
+   * Archiving only. The seller took the advert down, so there is nothing to
+   * show and nothing worth remembering about where it was — an archive
+   * carries no information about the market.
+   *
+   * The photos and the text stay; only the pin goes.
+   */
   @OnEvent('listing.archived')
   async onArchived(payload: ListingEventPayload, eventId: string) {
     await withIdempotency(
@@ -64,5 +77,30 @@ export class ProjectMapPointListener {
         );
       },
     );
+  }
+
+  /**
+   * Sold: the pin STAYS, and changes colour.
+   *
+   * This used to share the archive handler and delete the row, which kept
+   * the map tidy and destroyed the only record of where a sale happened —
+   * irreversibly, since nothing else stores the point. A sold pin is
+   * information a buyer wants ("this street is moving") and the thing that
+   * makes the asking-versus-actual comparison answerable across a city
+   * rather than one listing at a time.
+   *
+   * A full re-projection rather than `UPDATE ... SET sold = true`: the row
+   * may not exist at all. A listing with no centroid never had a pin, and
+   * one whose offers were edited in the same breath needs its price
+   * refreshed anyway. onChanged's INSERT already handles both, and now
+   * includes SOLD rows.
+   *
+   * `price` on the row stays the ASKING price. What it actually went for is
+   * in listing_sales, which this projection deliberately does not read —
+   * the viewport endpoint is public.
+   */
+  @OnEvent('listing.sold')
+  async onSold(payload: ListingEventPayload, eventId: string) {
+    await this.onChanged(payload, eventId);
   }
 }

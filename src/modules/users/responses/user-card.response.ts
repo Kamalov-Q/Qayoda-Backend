@@ -44,6 +44,17 @@ export class UserCardResponse {
   isVerifiedRealtor: boolean;
 
   @ApiProperty({
+    description: [
+      'Whether this account has filled in the optional half of its profile — a photo, a surname, a date of birth, a gender and a bio.',
+      '',
+      'A BOOLEAN on purpose. The fields it is computed from are not all public (age and gender never leave the server), so a client cannot work this out for itself and would label every complete profile incomplete if it tried.',
+      '',
+      'This is NOT `isVerifiedRealtor`. That one costs a passport and a human review; this one costs five minutes.',
+    ].join('\n'),
+  })
+  isMember: boolean;
+
+  @ApiProperty({
     nullable: true,
     description: 'Whatever they wrote about themselves.',
   })

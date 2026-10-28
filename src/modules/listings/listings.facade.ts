@@ -7,6 +7,7 @@ import {
   type OwnerListingsQuery,
 } from './listings.service';
 import { UpdateImagesDto } from './dto/update-images.dto';
+import { MarkSoldDto } from './dto/mark-sold.dto';
 import { UpdateListingDto } from './dto/update-listing.dto';
 
 @Injectable()
@@ -77,6 +78,10 @@ export class ListingsFacade {
 
   async archiveById(listingId: string) {
     return this.listingsService.archive(await this.mustGet(listingId));
+  }
+
+  async markSoldById(listingId: string, dto: MarkSoldDto) {
+    return this.listingsService.markSold(await this.mustGet(listingId), dto);
   }
 
   async restoreById(listingId: string) {

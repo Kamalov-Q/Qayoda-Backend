@@ -141,6 +141,36 @@ export class UsersService {
   // ------------------------------------------------------------ other people
 
   /** The profile card behind an avatar tap. */
+  /**
+   * Whether the optional half of a profile is filled in.
+   *
+   * Computed here rather than sent as its parts, because two of those parts
+   * (gender, date of birth) are deliberately never public — see the comment
+   * in getUserCard. A client given only what it is allowed to see would
+   * conclude that every profile is incomplete.
+   *
+   * Kept in step with mobile/src/features/profile/lib/completeness.ts, which
+   * applies the same rule to the OWNER's own full record.
+   */
+  private static isMember(user: {
+    surname: string | null;
+    gender: unknown;
+    birthDate: unknown;
+    bio: string | null;
+  }): boolean {
+    // No avatar in here. It is the most useful thing on a profile and the
+    // form still asks for it first, but a badge a single photograph can
+    // block is one most accounts never reach — and a signal almost nobody
+    // carries says nothing. Asked for, not required; see the client's
+    // completeness.ts, which this must stay in step with.
+    return (
+      !!user.surname?.trim() &&
+      !!user.gender &&
+      !!user.birthDate &&
+      !!user.bio?.trim()
+    );
+  }
+
   async getUserCard(userId: string): Promise<UserCardResponse> {
     const user = await this.findOrFail(userId);
 
@@ -153,6 +183,7 @@ export class UsersService {
       avatarUrl: user.avatarUrl,
       avatarThumbUrl: user.avatarThumbUrl,
       isVerifiedRealtor: user.isVerifiedRealtor,
+      isMember: UsersService.isMember(user),
       // Bio and socials only.
       //
       // Age, gender and address are deliberately NOT here. They were asked

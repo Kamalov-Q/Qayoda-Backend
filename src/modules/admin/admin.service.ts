@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -8,6 +9,7 @@ import { Brackets, In, Repository, SelectQueryBuilder } from 'typeorm';
 import { User } from '../users/entities/user.entity';
 import { Listing } from '../listings/entities/listing.entity';
 import { ListingImage } from '../listings/entities/listing-image.entity';
+import { ListingSale } from '../listings/entities/listing-sale.entity';
 import { ListingStatus } from '../listings/enums/listing-status.enum';
 import { ListingsFacade } from '../listings/listings.facade';
 import { UpdateListingDto } from '../listings/dto/update-listing.dto';
@@ -99,6 +101,7 @@ export class AdminService {
       totalListings,
       activeListings,
       archivedListings,
+      soldListings,
       newListings,
       listingsByCategory,
       openReports,
@@ -106,6 +109,7 @@ export class AdminService {
       pendingVerifications,
       videoStats,
       openVideoReports,
+      saleStats,
     ] = await Promise.all([
       this.users.count(),
       this.users.count({ where: { role: UserRole.ADMIN } }),
@@ -116,6 +120,7 @@ export class AdminService {
       this.listings.count(),
       this.listings.count({ where: { status: ListingStatus.ACTIVE } }),
       this.listings.count({ where: { status: ListingStatus.ARCHIVED } }),
+      this.listings.count({ where: { status: ListingStatus.SOLD } }),
       this.listings
         .createQueryBuilder('l')
         .where('l.created_at >= :since', { since })
@@ -126,6 +131,7 @@ export class AdminService {
       this.verificationService.pendingCount(),
       this.videosService.adminStats(),
       this.videoReportsService.openCount(),
+      this.saleStats(since),
     ]);
 
     return {
@@ -134,9 +140,17 @@ export class AdminService {
         total: totalListings,
         active: activeListings,
         archived: archivedListings,
+        // Counted separately, or the dashboard shows a total that its own
+        // breakdown does not add up to: a sold listing is neither active
+        // nor archived.
+        sold: soldListings,
         newThisWeek: newListings,
         byCategory: listingsByCategory,
       },
+      // Asking versus actual, across every sale on record. The point of
+      // asking the seller for a number: one listing's discount is an
+      // anecdote, the median of all of them is the market.
+      sales: saleStats,
       reports: { open: openReports },
       chatReports: { open: openChatReports },
       verification: { pending: pendingVerifications },
@@ -290,6 +304,16 @@ export class AdminService {
       }
     }
 
+    // What the sold ones actually went for. One query for the page, after
+    // paging, for the same reason the images are: a join would multiply rows
+    // under take/skip.
+    const sales = ids.length
+      ? await this.listings.manager.find(ListingSale, {
+          where: { listingId: In(ids) },
+        })
+      : [];
+    const saleByListing = new Map(sales.map((sale) => [sale.listingId, sale]));
+
     return {
       total,
       byCategory,
@@ -311,6 +335,33 @@ export class AdminService {
         // A past date is a listing that WAS promoted, which is worth seeing
         // in the queue — it says somebody paid and may pay again.
         promotedUntil: l.promotedUntil,
+        // TOP days bought and not yet served, banked while the advert is
+        // down. Surfaced because `promotedUntil` goes null while paused, and
+        // without this a paused promotion would be invisible here — which is
+        // how the burning-while-sold bug stayed hidden in the first place.
+        promotionRemainingSeconds: l.promotionRemainingSeconds,
+        // Asking versus actual, which is the whole reason the seller is
+        // asked. `discountPct` is computed here rather than in the client so
+        // every dashboard reading this agrees on the sign and the rounding:
+        // positive means it went for LESS than it was advertised at.
+        //
+        // Compared in USD, not in whatever each was quoted in — a so'm
+        // asking price against a dollar sale price is two numbers, not a
+        // comparison. Null when either side has no USD figure (pre-currency
+        // rows), rather than a 0% that reads as "sold at asking".
+        sale: saleByListing.get(l.id)
+          ? {
+              purpose: saleByListing.get(l.id)!.purpose,
+              price: saleByListing.get(l.id)!.price,
+              currency: saleByListing.get(l.id)!.currency,
+              priceUsd: saleByListing.get(l.id)!.priceUsd,
+              askingPrice: saleByListing.get(l.id)!.askingPrice,
+              askingCurrency: saleByListing.get(l.id)!.askingCurrency,
+              askingPriceUsd: saleByListing.get(l.id)!.askingPriceUsd,
+              discountPct: discountPct(saleByListing.get(l.id)!),
+              soldAt: saleByListing.get(l.id)!.soldAt,
+            }
+          : null,
         offers: l.offers?.map((o) => ({
           purpose: o.purpose,
           price: o.price,
@@ -424,14 +475,78 @@ export class AdminService {
   }
 
   /**
-   * ACTIVE <-> ARCHIVED through the listings service, so the map projection
-   * and caches follow. Archive is this app's delete: the owner's own delete
-   * button does exactly this.
+   * ACTIVE <-> ARCHIVED <-> SOLD through the listings service, so the map
+   * projection, the open offers and the caches all follow. Archive is this
+   * app's delete: the owner's own delete button does exactly this.
+   *
+   * SOLD only moves from ACTIVE, so setting it on an archived listing is
+   * refused rather than quietly skipping the map cleanup it already had.
+   * Restore is the way back from either.
    */
   async setListingStatus(id: string, dto: AdminListingStatusDto) {
     if (dto.status === 'ARCHIVED') await this.listingsFacade.archiveById(id);
-    else await this.listingsFacade.restoreById(id);
+    else if (dto.status === 'SOLD') {
+      if (!dto.sale) {
+        throw new BadRequestException({
+          code: 'SALE_REQUIRED',
+          message: 'Marking a listing sold requires the price it sold for',
+        });
+      }
+      await this.listingsFacade.markSoldById(id, dto.sale);
+    } else await this.listingsFacade.restoreById(id);
     return this.getListing(id);
+  }
+
+  /**
+   * What sales look like in aggregate.
+   *
+   * MEDIAN, not just the mean: discounts have a long tail — one listing sold
+   * at a tenth of asking (a typo, a distressed sale, a seller who entered
+   * so'm in the dollar field) drags an average somewhere no actual
+   * transaction is, and the dashboard then reports a market that does not
+   * exist. The mean is kept beside it because the gap between the two is
+   * itself the signal that something is off.
+   *
+   * Rows with no USD figure on either side are excluded rather than counted
+   * as zero, for the same reason discountPct returns null: a missing
+   * comparison is not a sale at asking price.
+   */
+  private async saleStats(since: Date) {
+    const [row] = await this.listings.manager.query<
+      {
+        count: string;
+        median_discount: string | null;
+        avg_discount: string | null;
+        total_usd: string | null;
+        count_this_week: string;
+      }[]
+    >(
+      `SELECT count(*)::int                                   AS count,
+              percentile_cont(0.5) WITHIN GROUP (
+                ORDER BY (1 - price_usd / asking_price_usd) * 100
+              )                                               AS median_discount,
+              avg((1 - price_usd / asking_price_usd) * 100)    AS avg_discount,
+              sum(price_usd)                                  AS total_usd,
+              count(*) FILTER (WHERE sold_at >= $1)::int       AS count_this_week
+         FROM listing_sales
+        WHERE price_usd IS NOT NULL
+          AND asking_price_usd IS NOT NULL
+          AND asking_price_usd > 0`,
+      [since],
+    );
+
+    const round = (v: string | null) =>
+      v === null ? null : Math.round(Number(v) * 10) / 10;
+
+    return {
+      count: Number(row?.count ?? 0),
+      newThisWeek: Number(row?.count_this_week ?? 0),
+      /** Percent under asking. Negative means sales are going over asking. */
+      medianDiscountPct: round(row?.median_discount ?? null),
+      avgDiscountPct: round(row?.avg_discount ?? null),
+      /** Gross transacted value, in USD. */
+      totalUsd: row?.total_usd === null ? null : Number(row?.total_usd ?? 0),
+    };
   }
 
   /** The same row shape findUsers() returns, for mutation responses. */
@@ -499,6 +614,7 @@ export class AdminService {
         active: byStatus.get('ACTIVE') ?? 0,
         draft: byStatus.get('DRAFT') ?? 0,
         archived: byStatus.get('ARCHIVED') ?? 0,
+        sold: byStatus.get('SOLD') ?? 0,
         // How many people have opened their adverts, all told.
         views: Number(totalViews[0]?.sum ?? 0),
       },
@@ -545,4 +661,24 @@ export class AdminService {
       createdAt: u.createdAt,
     };
   }
+}
+
+/**
+ * How far under the asking price it went, as a percentage.
+ *
+ * Positive is a discount, negative is over asking. Both happen, so the sign
+ * carries meaning and must not be absolute.
+ *
+ * Numerics arrive from node-postgres as strings often enough that Number()
+ * is not optional here, and a zero or missing asking price returns null —
+ * dividing by it would produce Infinity, and reporting that as a percentage
+ * is how a dashboard ends up showing a number nobody can explain.
+ */
+function discountPct(sale: ListingSale): number | null {
+  const asking = Number(sale.askingPriceUsd);
+  const sold = Number(sale.priceUsd);
+  if (!Number.isFinite(asking) || !Number.isFinite(sold) || asking <= 0) {
+    return null;
+  }
+  return Math.round((1 - sold / asking) * 1000) / 10;
 }

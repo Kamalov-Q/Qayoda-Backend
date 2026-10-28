@@ -38,5 +38,22 @@ export class ListingMapPoint {
    * emptied the map while filling the list.
    */
   @Column({ type: 'text', nullable: true }) title: string | null;
+
+  /**
+   * The listing behind this pin has sold.
+   *
+   * The pin STAYS — a sold advert used to be deleted from this projection,
+   * which kept the map clean and threw away the only record of where a sale
+   * happened. It is drawn differently instead (yellow), so a buyer can see
+   * at a glance what is still available and what has already gone.
+   *
+   * `price` on a sold row remains the ASKING price, deliberately. What it
+   * actually went for lives in listing_sales, which this projection does not
+   * read: the viewport endpoint is public, and a seller's negotiated figure
+   * is not something to publish to anyone panning the map.
+   */
+  @Index('idx_listing_map_points_sold', ['sold'], { where: 'sold' })
+  @Column({ type: 'boolean', default: false }) sold: boolean;
+
   @UpdateDateColumn({ name: 'updated_at' }) updatedAt: Date;
 }

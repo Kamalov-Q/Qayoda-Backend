@@ -194,7 +194,40 @@ export class Listing {
   @Column({ name: 'published_at', type: 'timestamptz', nullable: true })
   publishedAt: Date | null;
 
-  /** Paid "TOP" placement: the feed ranks the listing first until this. */
+  /**
+   * Paid "TOP" placement: the feed ranks the listing first until this.
+   *
+   * Null while a promotion is PAUSED — see promotionRemainingSeconds. That
+   * is deliberately the same null as "never promoted", so every reader of
+   * this column (the feed's ranking expression, the badge on the card, the
+   * badge on the detail page) treats a paused promotion as not promoted
+   * without having to know that pausing exists. An extra flag to check is a
+   * flag somebody forgets to check.
+   */
   @Column({ name: 'promoted_until', type: 'timestamptz', nullable: true })
   promotedUntil: Date | null;
+
+  /**
+   * TOP days bought and not yet served, banked while the advert is down.
+   *
+   * A promotion used to keep burning after a listing was sold or archived:
+   * the listing was out of every feed (they all filter to ACTIVE) while its
+   * `promoted_until` ticked away, so a seller who sold on day three of a
+   * seven-day TOP package paid for four days of placement that could not
+   * reach anybody. Nobody was charged twice, which is exactly why it went
+   * unnoticed.
+   *
+   * Taking the advert down now moves the remainder here and clears
+   * `promoted_until`; restoring it does the reverse, from `now()`. Seconds
+   * rather than an end date, because what was bought is a DURATION — an end
+   * date parked across an archive of unknown length is a number that means
+   * nothing by the time it is read.
+   *
+   * Null means nothing is banked. An ALREADY EXPIRED promotion is left
+   * exactly where it is, in `promoted_until`: a past date is the admin
+   * queue's signal that somebody paid once and may pay again, and banking
+   * zero seconds would erase it.
+   */
+  @Column({ name: 'promotion_remaining_seconds', type: 'int', nullable: true })
+  promotionRemainingSeconds: number | null;
 }

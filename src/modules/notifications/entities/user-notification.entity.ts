@@ -22,6 +22,29 @@ import { NotificationKind } from '../notifications.constants';
 @Entity('user_notifications')
 @Index('IDX_notifications_user', ['userId', 'createdAt'])
 @Index('IDX_notifications_unread', ['userId'], { where: 'read_at IS NULL' })
+// The two below were created by sql/2026-10-24-notifications-expansion.sql and
+// never declared here — so `synchronize`, which is on in dev, saw indexes the
+// entities did not know about and DROPPED them. That is not hypothetical: both
+// were missing from the dev database by 2026-10-28.
+//
+// The unique one is what makes "one unread row per conversation" a guarantee
+// rather than a hope: the service checks for an existing row and updates it,
+// but that check and the insert are two statements, and two messages arriving
+// together race straight through them. Losing it means a row per message —
+// an inbox that grows without bound and a push for each one.
+// Chat ONLY. The predicate used to be every unread row with a conversation
+// on it, which is wrong the moment any other kind carries one: the five
+// PRICE_BID_* kinds do, and a second offer in a thread hit a unique
+// violation that notify() swallowed — the notification and its push both
+// vanished. Bids must not collapse; each is a distinct number on the table.
+@Index('uq_notifications_unread_conversation', ['userId', 'conversationId'], {
+  unique: true,
+  where:
+    "conversation_id IS NOT NULL AND read_at IS NULL AND kind = 'CHAT_MESSAGE'",
+})
+@Index('idx_notifications_listing', ['userId', 'listingId', 'kind'], {
+  where: 'listing_id IS NOT NULL',
+})
 export class UserNotification {
   @PrimaryGeneratedColumn('uuid') id: string;
 

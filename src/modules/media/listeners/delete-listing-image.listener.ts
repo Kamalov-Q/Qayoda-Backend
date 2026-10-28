@@ -11,27 +11,22 @@ export class DeleteListingImageListener {
     private readonly mediaService: MediaService,
   ) {}
 
-  @OnEvent('listing.archived')
-  async handleArchived(payload: { listingId: string }, eventId: string) {
-    await withIdempotency(
-      this.dataSource,
-      eventId,
-      'delete-listing-images',
-      async () => {
-        const rows: { url: string; thumb_url: string }[] =
-          await this.dataSource.query(
-            `SELECT url, thumb_url FROM listing_images WHERE listing_id = $1`,
-            [payload.listingId],
-          );
-
-        for (const row of rows) {
-          await this.mediaService.deleteFromBunny(row.url);
-          await this.mediaService.deleteFromBunny(row.thumb_url);
-        }
-      },
-    );
-  }
-
+  /**
+   * Archiving used to delete the image FILES from Bunny while keeping the
+   * `listing_images` rows, which made archive a one-way door: restore() put
+   * the listing back on the map pointing at files that no longer existed, so
+   * a seller who took an advert down for a fortnight got it back with every
+   * photo broken and no way to tell except by looking.
+   *
+   * An archive now takes down only what makes the listing FINDABLE — its
+   * point or outline on the map, removed by ProjectMapPointListener — and
+   * leaves everything that describes it alone. Same for a sale.
+   *
+   * The cost is that an archived listing's photos keep occupying storage.
+   * That is the right way round: storage is cheap and a silently destroyed
+   * advert is not, and the files are still reclaimed when they are genuinely
+   * orphaned — replaced by an edit — below.
+   */
   @OnEvent('media.files_orphaned')
   async handleOrphaned(payload: { urls: string[] }, eventId: string) {
     await withIdempotency(

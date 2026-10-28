@@ -32,9 +32,18 @@ ALTER TABLE user_notifications
 --
 -- Partial and unique on the unread ones only: once read, the row is history
 -- and the next message is allowed to start a fresh one.
+--
+-- `kind = 'CHAT_MESSAGE'` was added by
+-- sql/2026-10-28-unread-conversation-index-chat-only.sql and is repeated here
+-- so a database built from scratch gets the right index first time. Without
+-- it the predicate also caught every other kind carrying a conversation_id —
+-- which, once price bids existed, silently dropped every offer notification
+-- after the first in a thread. See that file for the whole story.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_notifications_unread_conversation
   ON user_notifications (user_id, conversation_id)
-  WHERE conversation_id IS NOT NULL AND read_at IS NULL;
+  WHERE conversation_id IS NOT NULL
+    AND read_at IS NULL
+    AND kind = 'CHAT_MESSAGE';
 
 -- The same shape of claim for a listing: several people commenting on one ad
 -- is one thing to look at. Not unique — a reply to YOUR comment is a

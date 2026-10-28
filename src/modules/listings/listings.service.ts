@@ -8,9 +8,10 @@ import {
   ListingRepository,
   type OwnerListingSort,
 } from './repositories/listing.repository';
+import { InjectRepository } from '@nestjs/typeorm';
 import { ListingsGeoService } from './listings-geo.service';
 import { OutBoxService } from 'src/shared/events/outbox.service';
-import { DataSource } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { CreateListingDto } from './dto/create-listing.dto';
 import { ListListingsDto } from './dto/list-listings.dto';
 import { Listing } from './entities/listing.entity';
@@ -21,6 +22,9 @@ import { UpdateOffersDto } from './dto/update-offers.dto';
 import { UpdateGeometryDto } from './dto/update-geometry.dto';
 import { ListingImage } from './entities/listing-image.entity';
 import { UpdateImagesDto } from './dto/update-images.dto';
+import { ListingSale } from './entities/listing-sale.entity';
+import { MarkSoldDto } from './dto/mark-sold.dto';
+import { OfferPurpose } from './enums/offer-purpose.enum';
 import { ListingSaveRepository } from './repositories/listing-save.repository';
 import { CategoriesService } from '../categories/categories.service';
 import { AmenitiesService } from '../amenities/amenities.service';
@@ -45,6 +49,8 @@ export class ListingsService {
     private readonly geo: ListingsGeoService,
     private readonly outbox: OutBoxService,
     private readonly rates: RatesService,
+    @InjectRepository(ListingSale)
+    private readonly sales: Repository<ListingSale>,
     private readonly dataSource: DataSource,
     private readonly categories: CategoriesService,
     private readonly amenities: AmenitiesService,
@@ -251,12 +257,32 @@ export class ListingsService {
     };
   }
 
-  findMine(ownerId: string, limit?: number, offset?: number) {
-    return this.listings.findMine(
+  /**
+   * The seller's own list, with the sale figure attached to the sold ones.
+   *
+   * Safe to include here and nowhere else: this route is behind the session
+   * and scoped to the caller's own ownerId, so the only person who can read
+   * a sale price through it is the person who entered it. The public detail
+   * endpoint still cannot — see ListingSale.
+   */
+  async findMine(ownerId: string, limit?: number, offset?: number) {
+    const listings = await this.listings.findMine(
       ownerId,
       limit ? Math.min(limit, 50) : undefined,
       offset,
     );
+
+    // Only the sold ones have a row, so only they are worth asking about —
+    // and a seller with no sales pays nothing for this.
+    const soldIds = listings
+      .filter((l) => l.status === ListingStatus.SOLD)
+      .map((l) => l.id);
+    if (!soldIds.length) return listings.map((l) => ({ ...l, sale: null }));
+
+    const byListing = new Map(
+      (await this.findSales(soldIds)).map((sale) => [sale.listingId, sale]),
+    );
+    return listings.map((l) => ({ ...l, sale: byListing.get(l.id) ?? null }));
   }
 
   findFeed(dto: ListListingsDto) {
@@ -606,9 +632,7 @@ export class ListingsService {
 
   async archive(listing: Listing) {
     await this.dataSource.transaction(async (manager) => {
-      await manager.update(Listing, listing.id, {
-        status: ListingStatus.ARCHIVED,
-      });
+      await this.takeDown(manager, listing.id, ListingStatus.ARCHIVED);
       await this.outbox.publish(
         'listing.archived',
         { listingId: listing.id },
@@ -621,31 +645,217 @@ export class ListingsService {
   }
 
   /**
-   * The inverse of archive(): back to `ACTIVE`, and back onto the map.
+   * The deal went through.
+   *
+   * Distinct from archive() because the two are different facts, not two
+   * spellings of one. Archived is the seller taking an advert down, for any
+   * reason or none. Sold is the property having found a buyer, which is
+   * worth keeping as a fact: it is what the owner wants to see on their own
+   * list, and a stale link lands on something that explains itself.
+   *
+   * What comes down is what makes the advert FINDABLE — its point on the
+   * map, and every offer still open on it. What stays is everything that
+   * describes it: the photos, the text, the price it went for.
+   *
+   * Reversible through restore(), for the sale that falls through.
+   *
+   * `listing.sold` rather than re-using `listing.archived`: the map
+   * projector and the bid closer want identical behaviour here, but the
+   * bidder has to be told the right thing, and "withdrawn" about a property
+   * that sold is the wrong thing.
+   */
+  async markSold(listing: Listing, dto: MarkSoldDto) {
+    // Idempotent — a double tap on a flaky connection must not fail the
+    // second time. The price is NOT rewritten on the repeat: the first
+    // answer is the one the seller gave while they were being asked, and a
+    // retry is a network event, not a correction.
+    if (listing.status === ListingStatus.SOLD) {
+      return this.findById(listing.id);
+    }
+    // Only from live. A draft was never for sale, and an advert that was
+    // taken down was taken down rather than sold; going straight from
+    // ARCHIVED to SOLD would also skip the map cleanup it already had.
+    if (listing.status !== ListingStatus.ACTIVE) {
+      throw new BadRequestException({
+        code: 'LISTING_NOT_ACTIVE',
+        message: 'Only a live listing can be marked sold',
+      });
+    }
+
+    const offer = this.saleOffer(listing, dto.purpose);
+    // The currency the seller answered in, or — when they did not say — the
+    // one the advert was quoted in, which is what the number in front of
+    // them was denominated in.
+    const currency = dto.currency ?? offer.currency;
+
+    await this.dataSource.transaction(async (manager) => {
+      await this.takeDown(manager, listing.id, ListingStatus.SOLD);
+
+      // save(), so a relisted listing selling a second time overwrites its
+      // row rather than colliding on the primary key.
+      await manager.save(
+        manager.create(ListingSale, {
+          listingId: listing.id,
+          ownerId: listing.ownerId,
+          purpose: offer.purpose,
+          price: dto.amount,
+          currency,
+          priceUsd: this.rates.toUsd(dto.amount, currency),
+          // Snapshotted, not joined to later — see ListingSale for why a
+          // moving baseline makes the comparison worthless.
+          askingPrice: offer.price,
+          askingCurrency: offer.currency,
+          askingPriceUsd:
+            offer.priceUsd ?? this.rates.toUsd(offer.price, offer.currency),
+          soldAt: new Date(),
+        }),
+      );
+
+      await this.outbox.publish(
+        'listing.sold',
+        { listingId: listing.id },
+        manager,
+      );
+    });
+
+    this.cache.clear();
+    return this.findById(listing.id);
+  }
+
+  /**
+   * Take an advert down, banking any TOP days it has left.
+   *
+   * Shared by archive() and markSold() because the promotion arithmetic is
+   * identical and the bug it fixes was identical: every feed filters to
+   * ACTIVE, so a promotion running on a listing that is not ACTIVE is a
+   * promotion nobody can see, quietly expiring.
+   *
+   * Only a LIVE promotion is banked. An already-expired `promoted_until` is
+   * left exactly where it is — a past date is how the admin queue knows
+   * somebody paid once, and overwriting it with a banked zero would erase
+   * that.
+   *
+   * CEIL, not ROUND: the seller keeps the part-second rather than losing it.
+   * GREATEST(..., 1) because a promotion with 400ms left is still a live
+   * promotion by the WHEN above, and banking it as 0 would silently drop it
+   * into the "nothing banked" branch on restore.
+   */
+  private takeDown(
+    manager: EntityManager,
+    listingId: string,
+    status: ListingStatus.ARCHIVED | ListingStatus.SOLD,
+  ) {
+    return manager.query(
+      `UPDATE listings
+          SET status = $2,
+              promotion_remaining_seconds =
+                CASE WHEN promoted_until > now()
+                     THEN GREATEST(
+                            CEIL(EXTRACT(EPOCH FROM (promoted_until - now()))),
+                            1
+                          )::int
+                     ELSE promotion_remaining_seconds END,
+              promoted_until =
+                CASE WHEN promoted_until > now()
+                     THEN NULL
+                     ELSE promoted_until END,
+              updated_at = now()
+        WHERE id = $1`,
+      [listingId, status],
+    );
+  }
+
+  /**
+   * Which offer sold.
+   *
+   * A listing can carry a sale price and a monthly rent at once, so "what
+   * did it go for" is ambiguous whenever there is more than one live offer —
+   * and guessing produces a plausible number filed against the wrong
+   * question. One offer: use it, and do not make the app ask. More than
+   * one: the caller must say.
+   */
+  private saleOffer(listing: Listing, purpose?: OfferPurpose): ListingOffer {
+    const live = (listing.offers ?? []).filter((o) => o.isActive);
+
+    if (!live.length) {
+      throw new BadRequestException({
+        code: 'LISTING_HAS_NO_OFFER',
+        message: 'A listing with no live offer has no asking price to compare',
+      });
+    }
+
+    if (!purpose) {
+      if (live.length > 1) {
+        throw new BadRequestException({
+          code: 'SALE_PURPOSE_REQUIRED',
+          message:
+            'This listing has more than one live offer — say which one sold',
+        });
+      }
+      return live[0];
+    }
+
+    const match = live.find((o) => o.purpose === purpose);
+    if (!match) {
+      throw new BadRequestException({
+        code: 'OFFER_NOT_FOUND',
+        message: `This listing has no live ${purpose} offer`,
+      });
+    }
+    return match;
+  }
+
+  /**
+   * The inverse of archive() and of markSold(): back to `ACTIVE`, and back
+   * onto the map.
    *
    * `listing.published` is the event to re-emit — the map-point projector
    * treats it as "rebuild this listing's point from scratch", and its INSERT
    * only fires for `ACTIVE` rows, which this transaction has committed by the
    * time the outbox relay dispatches.
    *
-   * Caveat: archiving also deletes the image FILES from Bunny (see
-   * DeleteListingImageListener) while keeping the `listing_images` rows, so a
-   * restored listing comes back pointing at deleted files and needs its photos
-   * re-uploaded. If archive is meant to be reversible, that listener is the
-   * thing to reconsider.
+   * This used to carry a caveat: archiving deleted the image FILES while
+   * keeping their rows, so a restored listing came back pointing at files
+   * that no longer existed and needed every photo re-uploaded. That is
+   * fixed — see DeleteListingImageListener — and a restore now genuinely
+   * returns the advert that was taken down.
+   *
+   * Takes a sold listing back as well as an archived one, for the deal that
+   * falls through after the handshake.
    */
   async restore(listing: Listing) {
     // Idempotent: restoring a live listing is a no-op rather than an error, so
-    // a double tap over a flaky connection cannot fail the second time.
-    if (listing.status !== ListingStatus.ARCHIVED) {
+    // a double tap over a flaky connection cannot fail the second time. A
+    // DRAFT is left alone too — it was never published, so there is nothing
+    // to put back.
+    if (
+      listing.status !== ListingStatus.ARCHIVED &&
+      listing.status !== ListingStatus.SOLD
+    ) {
       this.cache.clear();
       return this.findById(listing.id);
     }
 
     await this.dataSource.transaction(async (manager) => {
-      await manager.update(Listing, listing.id, {
-        status: ListingStatus.ACTIVE,
-      });
+      // Status and the banked promotion in one statement, computed in SQL
+      // from the row's own values: `make_interval` needs the stored seconds,
+      // and reading them in JS first would be a second round trip plus a
+      // window in which a concurrent promote() could change them.
+      await manager.query(
+        `UPDATE listings
+            SET status = 'ACTIVE',
+                promoted_until =
+                  CASE WHEN promotion_remaining_seconds > 0
+                       THEN now()
+                            + make_interval(secs => promotion_remaining_seconds)
+                       -- Nothing banked: leave whatever is there, which may
+                       -- be a past date the admin queue reads as "paid once".
+                       ELSE promoted_until END,
+                promotion_remaining_seconds = NULL,
+                updated_at = now()
+          WHERE id = $1`,
+        [listing.id],
+      );
       await this.outbox.publish(
         'listing.published',
         { listingId: listing.id },
@@ -655,6 +865,29 @@ export class ListingsService {
 
     this.cache.clear();
     return this.findById(listing.id);
+  }
+
+  /**
+   * What a listing sold for, or null if it has not.
+   *
+   * Reached only through an owner-guarded route and the admin module. Not
+   * folded into findById for the reason ListingSale spells out: that endpoint
+   * is public and spreads the whole entity, so the only reliable way to keep
+   * this figure private is for it not to be on the entity at all.
+   */
+  findSale(listingId: string): Promise<ListingSale | null> {
+    return this.sales.findOne({ where: { listingId } });
+  }
+
+  /**
+   * The sale rows for a page of listings, for the owner's own list.
+   *
+   * One query for the page rather than one per card — the seller's
+   * "Sotilganlar" tab is the one screen that shows many of these at once.
+   */
+  async findSales(listingIds: string[]): Promise<ListingSale[]> {
+    if (!listingIds.length) return [];
+    return this.sales.find({ where: { listingId: In(listingIds) } });
   }
 
   async getSummaries(listingIds: string[]) {

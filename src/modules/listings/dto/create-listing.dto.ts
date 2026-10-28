@@ -14,6 +14,7 @@ import {
   MaxLength,
   Min,
   ValidateNested,
+  MinLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
@@ -26,6 +27,7 @@ import { Type } from 'class-transformer';
 import { CATEGORY_SLUG } from '../../categories/categories.constants';
 import { ValidPolygon } from '../validators/valid-polygon.validator';
 import { NotAboveTotalFloors } from '../validators/floors.validator';
+import { IsUzPhone } from '../validators/uz-phone.validator';
 import { MAX_FLOORS, MIN_FLOOR } from '../listings.constants';
 import { ApiPolygonCoordinates } from '../decorators/api-polygon-coordinates.decorator';
 import type { PolygonCoordinates } from '../types/geojson.type';
@@ -52,6 +54,11 @@ export class OfferInputDto {
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  // The clients apply a per-purpose, per-currency band (a daily rate and a
+  // sale price differ by four orders of magnitude). This is only the outer
+  // wall: 10^13 is above any real UZS sale price and below the point where a
+  // number stops surviving a round trip through JSON.
+  @Max(10_000_000_000_000)
   price: number;
 
   @ApiProperty({
@@ -80,6 +87,7 @@ export class CreateListingDto {
   })
   @IsOptional()
   @IsString()
+  @MinLength(3)
   @MaxLength(160)
   title?: string;
 
@@ -90,6 +98,10 @@ export class CreateListingDto {
   })
   @IsOptional()
   @IsString()
+  // Was unbounded, which made a listing body an open-ended write into the
+  // row — and into every search index derived from it. 8000 leaves room for
+  // the markup around the clients' 2000-character limit.
+  @MaxLength(8000)
   descriptionHtml?: string;
 
   @ApiPropertyOptional({ type: 'integer', example: 3, minimum: 0 })
@@ -97,6 +109,7 @@ export class CreateListingDto {
   @Type(() => Number)
   @IsInt()
   @Min(0)
+  @Max(50)
   rooms?: number;
 
   @ApiPropertyOptional({
@@ -187,6 +200,7 @@ export class CreateListingDto {
   @IsOptional()
   @IsString()
   @MaxLength(20)
+  @IsUzPhone()
   contactPhone?: string;
 
   @ApiPolygonCoordinates()
@@ -217,6 +231,8 @@ export class CreateListingDto {
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  // 1000 ha — large farmland, nothing bigger. Mirrors MAX_AREA_M2 in the app.
+  @Max(10_000_000)
   areaM2?: number;
 
   @ApiProperty({

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserNotification } from './entities/user-notification.entity';
 import { Listing } from '../listings/entities/listing.entity';
+import { ListingImage } from '../listings/entities/listing-image.entity';
 import { PushToken } from './entities/push-token.entity';
 import { ExpoPushService } from './expo-push.service';
 import { UserNotificationsService } from './user-notifications.service';
@@ -26,7 +27,14 @@ import { AuthModule } from '../auth/auth.module';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([UserNotification, User, Video, Listing, PushToken]),
+    TypeOrmModule.forFeature([
+      UserNotification,
+      User,
+      Video,
+      Listing,
+      ListingImage,
+      PushToken,
+    ]),
     AuthModule,
   ],
   controllers: [UserNotificationsController],

@@ -27,6 +27,7 @@ import { ViewsModule } from './modules/views/views.module';
 import { VideosModule } from './modules/videos/videos.module';
 import { ListingVideosModule } from './modules/listing-videos/listing-videos.module';
 import { FollowsModule } from './modules/follows/follows.module';
+import { PriceBidsModule } from './modules/price-bids/price-bids.module';
 import { SupportModule } from './modules/support/support.module';
 import { BlocksModule } from './modules/blocks/blocks.module';
 import { HealthModule } from './modules/health/health.module';
@@ -59,6 +60,7 @@ import { HealthModule } from './modules/health/health.module';
     VideosModule,
     ListingVideosModule,
     FollowsModule,
+    PriceBidsModule,
     SupportModule,
     BlocksModule,
   ],

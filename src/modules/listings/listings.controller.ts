@@ -30,6 +30,7 @@ import { PhoneRequiredGuard } from '../auth/guards/phone-required.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { CreateListingDto } from './dto/create-listing.dto';
 import { PromoteListingDto } from './dto/promote-listing.dto';
+import { MarkSoldDto } from './dto/mark-sold.dto';
 import { ListingOwnershipGuard } from './guards/listing-ownership.guard';
 import { UpdateOffersDto } from './dto/update-offers.dto';
 import { UpdateGeometryDto } from './dto/update-geometry.dto';
@@ -315,7 +316,7 @@ export class ListingsController {
   @ApiOperation({
     summary: 'Archive a listing',
     description:
-      'Soft-delete: the listing moves to `ARCHIVED` and drops off the map, but the record is kept.',
+      'Soft-delete: the listing moves to `ARCHIVED` and drops off the map, but the record is kept in full — photos included, so `PATCH /listings/:id/restore` brings back the advert that was taken down. Any offer still open on it is closed, with `ARCHIVED` as the reason.',
   })
   @ApiParam(LISTING_ID_PARAM)
   @ApiUnauthorizedResponse({ type: ErrorResponse })
@@ -328,11 +329,55 @@ export class ListingsController {
   }
 
   @ApiOperation({
-    summary: 'Restore an archived listing',
+    summary: 'Mark the listing sold',
     description: [
-      'Undoes an archive: the listing returns to `ACTIVE` and is projected back onto the map. Restoring a listing that is not archived changes nothing and returns it as-is.',
+      'The deal went through. Distinct from archiving, which is the seller taking an advert down for any reason: this records that the property found a buyer.',
       '',
-      'Note that archiving deletes the stored image files while keeping their rows, so a restored listing needs its photos re-uploaded via `PUT /listings/:id/images`.',
+      'The listing moves to `SOLD` and every offer still open on it is closed — each bidder is told, with `SOLD` as the reason. Everything that describes the advert is kept: the photos, the text, the map pin. Anyone holding a link can still read it, badged as sold, and the pin stays on the map in a different colour.',
+      '',
+      'The body records what it actually sold for, against the asking price as it stood at that moment. That figure is **not** returned by the public detail endpoint — see `GET /listings/:id/sale`.',
+      '',
+      'Only from `ACTIVE`. Reversible via `PATCH /listings/:id/restore`, for the sale that falls through.',
+    ].join('\n'),
+  })
+  @ApiParam(LISTING_ID_PARAM)
+  @ApiBadRequestResponse({ type: ErrorResponse })
+  @ApiUnauthorizedResponse({ type: ErrorResponse })
+  @ApiForbiddenResponse(NOT_OWNER)
+  @ApiNotFoundResponse(NO_LISTING)
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAccessGuard, ListingOwnershipGuard)
+  @Patch(':id/sold')
+  markSold(@Req() req: ListingRequest, @Body() dto: MarkSoldDto) {
+    return this.listingsService.markSold(req.listing, dto);
+  }
+
+  @ApiOperation({
+    summary: 'What this listing sold for',
+    description: [
+      'The agreed price, the asking price as it stood when the sale was recorded, and the date.',
+      '',
+      'Owner only — deliberately a separate, guarded endpoint rather than a field on the public listing. A seller who knows the figure is public reports a flattering one, and the asking-versus-actual comparison this records is worth nothing if the numbers in it are decorative.',
+      '',
+      '`null` when the listing has not been sold.',
+    ].join('\n'),
+  })
+  @ApiParam(LISTING_ID_PARAM)
+  @ApiUnauthorizedResponse({ type: ErrorResponse })
+  @ApiForbiddenResponse(NOT_OWNER)
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAccessGuard, ListingOwnershipGuard)
+  @Get(':id/sale')
+  sale(@Req() req: ListingRequest) {
+    return this.listingsService.findSale(req.listing.id);
+  }
+
+  @ApiOperation({
+    summary: 'Restore an archived or sold listing',
+    description: [
+      'Undoes an archive or a sale: the listing returns to `ACTIVE` and is projected back onto the map. Restoring a listing that is neither archived nor sold changes nothing and returns it as-is.',
+      '',
+      'Offers closed when the listing went down are NOT reopened — they were answered, and a bidder whose offer was declined is not silently back in a negotiation. The photos and text come back untouched.',
     ].join('\n'),
   })
   @ApiParam(LISTING_ID_PARAM)

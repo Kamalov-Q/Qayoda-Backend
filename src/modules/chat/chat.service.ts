@@ -40,6 +40,8 @@ export class ChatService {
     guestId: string,
     listingId: string,
     dto: SendMessageDto,
+    /** Set by PriceBidsService when the opening message IS a bid. */
+    priceBidId?: string | null,
   ) {
     const listing = await this.listings.getSummary(listingId);
 
@@ -59,7 +61,13 @@ export class ChatService {
     );
 
     if (existing) {
-      const message = await this.sendMessage(existing.id, guestId, dto);
+      const message = await this.sendMessage(
+        existing.id,
+        guestId,
+        dto,
+        undefined,
+        priceBidId,
+      );
       // Re-read: sendMessage bumps lastMessageAt/preview, and `existing` is stale.
       return {
         conversation: await this.getConversation(existing.id, guestId),
@@ -106,7 +114,13 @@ export class ChatService {
       conv = raced;
     }
 
-    const message = await this.sendMessage(conv.id, guestId, dto);
+    const message = await this.sendMessage(
+      conv.id,
+      guestId,
+      dto,
+      undefined,
+      priceBidId,
+    );
 
     return {
       conversation: await this.getConversation(conv.id, guestId),
@@ -244,6 +258,12 @@ export class ChatService {
      * could put anyone's name on anything.
      */
     forwardedFrom?: { userId: string | null; name: string | null },
+    /**
+     * The bid this message announces. Server-set like `forwardedFrom`, and
+     * for the same reason: a client that could put a bid id on an arbitrary
+     * message could paint any number into any thread.
+     */
+    priceBidId?: string | null,
   ) {
     const conv = await this.assertParticipant(conversationId, senderId);
     const recipientId = this.otherPartyOf(conv, senderId);
@@ -290,6 +310,7 @@ export class ChatService {
           height: dto.height ?? null,
           waveform: dto.waveform ?? null,
           replyToId: dto.replyToId ?? null,
+          priceBidId: priceBidId ?? null,
           forwardedFromUserId: forwardedFrom?.userId ?? null,
           forwardedFromName: forwardedFrom?.name ?? null,
           clientId: dto.clientId ?? null,
@@ -662,6 +683,9 @@ export class ChatService {
       height: m.height,
       waveform: m.waveform,
       replyToId: m.replyToId,
+      // Null on an ordinary message; the client draws the bid card instead
+      // of the body when this is set, and the body when it is not.
+      priceBidId: m.priceBidId,
       // Null on an ordinary message; the client draws the "forwarded from"
       // line only when there is a name to draw.
       forwardedFromUserId: m.forwardedFromUserId,

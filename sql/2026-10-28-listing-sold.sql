@@ -1,0 +1,23 @@
+-- "Sold" as a listing status of its own.
+--
+--   psql "$DATABASE_URL" -f sql/2026-10-28-listing-sold.sql
+--
+-- Archived and sold are not the same event. Archived is the seller taking an
+-- advert down, for any reason; sold is the property having found a buyer.
+-- Collapsing them loses the only one of the two that is worth keeping as a
+-- fact, and it is the one the owner wants to see on their own list.
+--
+-- Behaviourally sold sits where archived does — off the map, out of the feed,
+-- closed to new offers. That needs no query changes: nearly every statement
+-- in the codebase allowlists `status = 'ACTIVE'` rather than excluding
+-- ARCHIVED, so a new label is invisible to all of them by default.
+--
+-- NOT wrapped in a transaction. ALTER TYPE ... ADD VALUE is allowed inside
+-- one on PG 12+, but the new label cannot be USED until that transaction
+-- commits, and a single statement outside one has neither restriction nor
+-- anything to roll back. Safe to re-run: IF NOT EXISTS.
+--
+-- Appends, so the label order matches the TS enum and `npm run schema:sql`
+-- stays quiet.
+
+ALTER TYPE listings_status_enum ADD VALUE IF NOT EXISTS 'SOLD';
