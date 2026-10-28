@@ -16,6 +16,7 @@ import { ListingSaveRepository } from './repositories/listing-save.repository';
 import { ListingsService } from './listings.service';
 import { ListingsGeoService } from './listings-geo.service';
 import { ListingsFacade } from './listings.facade';
+import { PriceNormalizationService } from './price-normalization.service';
 import { ListingOwnershipGuard } from './guards/listing-ownership.guard';
 import { ProjectMapPointListener } from './listeners/project-map-point.listener';
 import { AuthModule } from '../auth/auth.module';
@@ -45,6 +46,7 @@ import { BillingModule } from '../billing/billing.module';
     ListingOfferRepository,
     ListingMapPointRepository,
     ListingSaveRepository,
+    PriceNormalizationService,
     ListingsService,
     ListingsGeoService,
     ListingsFacade,
