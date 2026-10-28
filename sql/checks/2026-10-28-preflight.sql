@@ -84,9 +84,15 @@ SELECT ord AS "#",
 -- Left to burn: adverts already down with a promotion still running. The
 -- pause migration's backfill repairs exactly these, so a non-zero count here
 -- BEFORE it runs is expected, and it must be zero after.
+-- status::text, NOT status IN ('ARCHIVED','SOLD'). Comparing against the bare
+-- literals makes Postgres cast them to listings_status_enum, which FAILS with
+-- `invalid input value for enum` on any database that has not yet run
+-- 2026-10-28-listing-sold.sql — that is, on exactly the databases this probe
+-- exists to inspect. Casting the column to text instead compares strings, and
+-- a label that does not exist simply matches nothing.
 SELECT count(*) AS promotions_still_burning_on_down_listings
   FROM listings
- WHERE status IN ('ARCHIVED', 'SOLD')
+ WHERE status::text IN ('ARCHIVED', 'SOLD')
    AND promoted_until > now();
 
 -- Invalid indexes. CREATE INDEX CONCURRENTLY leaves one behind when it fails,
