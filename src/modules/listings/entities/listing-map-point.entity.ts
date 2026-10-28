@@ -40,18 +40,33 @@ export class ListingMapPoint {
   @Column({ type: 'text', nullable: true }) title: string | null;
 
   /**
-   * The listing behind this pin has sold.
+   * The listing behind this point has sold.
    *
-   * The pin STAYS — a sold advert used to be deleted from this projection,
-   * which kept the map clean and threw away the only record of where a sale
-   * happened. It is drawn differently instead (yellow), so a buyer can see
-   * at a glance what is still available and what has already gone.
+   * The ROW is kept and the PIN is not shown. Those are two different
+   * decisions and both are deliberate:
    *
-   * `price` on a sold row remains the ASKING price, deliberately. What it
-   * actually went for lives in listing_sales, which this projection does not
-   * read: the viewport endpoint is public, and a seller's negotiated figure
-   * is not something to publish to anyone panning the map.
+   * Not shown, because a sold advert is not something a buyer can act on and
+   * the map is finite — every feature competes for a fixed LIMIT, so sold
+   * points accumulating forever would steadily crowd out the listings that
+   * are still for sale. The viewport query filters on this column.
+   *
+   * Kept, because deleting it destroys the only record of WHERE a sale
+   * happened, irreversibly — nothing else stores the point once the listing
+   * is off the map. Location plus date plus (via listing_sales) the actual
+   * price is the dataset that makes "what is anything worth around here"
+   * answerable, and it cannot be reconstructed later.
+   *
+   * Somebody who wants a sold listing's location opens the listing: its
+   * detail page draws its own map from the listing's own geometry, which
+   * markSold never touches.
+   *
+   * `price` on a sold row remains the ASKING price. What it actually went
+   * for lives in listing_sales, which this projection does not read.
    */
+  // Partial on the sold rows, which are the minority and the ones a
+  // comparables report would ask for. The viewport's `sold = false` filter
+  // rides on the spatial index instead — it is the ST_Intersects that
+  // selects, and this is only a predicate applied to what that returns.
   @Index('idx_listing_map_points_sold', ['sold'], { where: 'sold' })
   @Column({ type: 'boolean', default: false }) sold: boolean;
 

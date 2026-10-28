@@ -27,14 +27,6 @@ export interface ViewportPolygonFeature {
   price: string;
   currency: string;
   thumbUrl: string | null;
-  /**
-   * Already sold. The client draws these in a different colour rather than
-   * hiding them — see ListingMapPoint.sold.
-   *
-   * `price` stays the ASKING price on a sold feature. What it went for is in
-   * listing_sales, and this endpoint is public.
-   */
-  sold: boolean;
 }
 
 export interface ViewportPointFeature {
@@ -45,8 +37,6 @@ export interface ViewportPointFeature {
   price: string;
   currency: string;
   thumbUrl: string | null;
-  /** Already sold — drawn differently, not dropped. */
-  sold: boolean;
 }
 
 interface GeometryCheckRow {
@@ -120,18 +110,26 @@ export class ListingsGeoService {
     l.area_m2                        AS "areaM2",
     o.price, o.currency,
     li.thumb_url                    AS "thumbUrl",
-    l.status = 'SOLD'               AS sold,
     EXISTS (
       SELECT 1 FROM videos v WHERE v.listing_id = l.id AND v.status = 'READY'
     )                               AS "hasVideo"
   FROM listings l
   JOIN listing_offers o ON o.listing_id = l.id AND o.purpose = $1 AND o.is_active
   LEFT JOIN listing_images li ON li.listing_id = l.id AND li.is_primary
-  -- SOLD as well as ACTIVE: a sold advert keeps its place on the map and is
-  -- drawn in a different colour. This branch reads the listings table
-  -- directly while the points branch reads the projection, so BOTH had to be
-  -- widened -- miss one and a pin changes colour as you zoom.
-  WHERE l.status IN ('ACTIVE', 'SOLD')
+  -- ACTIVE only. A sold advert is not something a buyer can act on, and the
+  -- map is finite: every feature here competes for a fixed LIMIT, so sold
+  -- pins accumulating forever would crowd out the listings that are still
+  -- for sale.
+  --
+  -- The ROW is kept — listing_map_points.sold still records where a sale
+  -- happened, for reporting — it is simply not published here. Anyone who
+  -- wants a sold listing's location opens the listing: the detail page draws
+  -- its own map from the listing's geometry, which markSold never touches.
+  --
+  -- This branch reads the listings table directly while the points branch
+  -- reads the projection, so BOTH have to agree -- miss one and a sold pin
+  -- appears at one zoom level and vanishes at the next.
+  WHERE l.status = 'ACTIVE'
     AND l.centroid IS NOT NULL
     AND ST_Intersects(COALESCE(l.geom, l.centroid), ST_MakeEnvelope($2, $3, $4, $5, 4326))
     ${categoryFilter} ${priceMinFilter} ${priceMaxFilter} ${addressFilter} ${searchFilter} ${radiusFilter}
@@ -210,7 +208,6 @@ export class ListingsGeoService {
         ST_AsGeoJSON(centroid)::json    AS centroid,
         price, currency,
         thumb_url                       AS "thumbUrl",
-        sold,
         -- Whether there is a walkthrough behind this pin. EXISTS rather than
         -- a join: the answer is a boolean, the index on videos is partial to
         -- READY rows, and a join would multiply the pin by its videos.
@@ -221,6 +218,10 @@ export class ListingsGeoService {
         )                               AS "hasVideo"
       FROM listing_map_points
       WHERE purpose = $1
+        -- Sold rows stay in this table and out of this answer. See the
+        -- polygon branch above for why, and ListingMapPoint.sold for what
+        -- the row is kept for.
+        AND sold = false
         AND ST_Intersects(centroid, ST_MakeEnvelope($2, $3, $4, $5, 4326))
         ${categoryFilter} ${priceMinFilter} ${priceMaxFilter} ${addressFilter} ${searchFilter} ${radiusFilter}
       -- Same memory math as the polygon branch.

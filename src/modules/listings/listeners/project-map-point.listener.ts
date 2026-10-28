@@ -80,14 +80,17 @@ export class ProjectMapPointListener {
   }
 
   /**
-   * Sold: the pin STAYS, and changes colour.
+   * Sold: the ROW stays, flagged; the pin is not drawn.
    *
    * This used to share the archive handler and delete the row, which kept
    * the map tidy and destroyed the only record of where a sale happened —
-   * irreversibly, since nothing else stores the point. A sold pin is
-   * information a buyer wants ("this street is moving") and the thing that
-   * makes the asking-versus-actual comparison answerable across a city
-   * rather than one listing at a time.
+   * irreversibly, since nothing else stores the point once the listing is
+   * off the map.
+   *
+   * So the row is written and `sold` is set, and the viewport query filters
+   * it out. The map stays clean for buyers (a sold advert is not something
+   * they can act on, and every feature competes for a fixed LIMIT) while the
+   * location survives for reporting.
    *
    * A full re-projection rather than `UPDATE ... SET sold = true`: the row
    * may not exist at all. A listing with no centroid never had a pin, and
