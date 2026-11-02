@@ -1,8 +1,8 @@
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { runPreSync } from './pre-sync';
-
-const isLocalHost = (url: string) =>
-  /@(localhost|127\.0\.0\.1|host\.docker\.internal|postgres)[:/]/.test(url);
+// Shared with the CLI's DataSource — two copies of this rule would mean the
+// CLI connecting without TLS to a host the app uses TLS for.
+import { isLocalHost } from './is-local-host';
 
 /**
  * Built lazily so `process.env` is read after ConfigModule has loaded `.env`.

@@ -21,7 +21,14 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "db:show": "node -r ts-node/register -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d src/shared/database/data-source.ts migration:show",
+    "db:run": "node -r ts-node/register -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d src/shared/database/data-source.ts migration:run",
+    "db:revert": "node -r ts-node/register -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d src/shared/database/data-source.ts migration:revert",
+    "db:generate": "node -r ts-node/register -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d src/shared/database/data-source.ts migration:generate",
+    "db:create": "node ./node_modules/typeorm/cli.js migration:create",
+    "db:baseline": "node scripts/db-baseline.mjs",
+    "db:diff": "bash scripts/db-diff.sh"
   },
   "dependencies": {
     "@nestjs/axios": "^12.0.0",
