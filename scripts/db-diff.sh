@@ -37,6 +37,38 @@ USAGE
   exit 1
 fi
 
+# pg_dump refuses to dump a server newer than itself, and says so in a way
+# that reads like a connection problem. Checked here, with the fix, because
+# the local database is PostgreSQL 17 and Ubuntu 24.04 ships the 16 client —
+# so this fails on a clean machine every time until someone installs the
+# matching client.
+check_client_version() {
+  local url="$1" label="$2" server client
+  server="$(psql "$url" -tAc 'SHOW server_version' 2>/dev/null | cut -d. -f1)" || return 0
+  client="$(pg_dump --version | grep -oE '[0-9]+' | head -1)"
+  if [[ -n "$server" && "$client" -lt "$server" ]]; then
+    cat >&2 <<EOF
+pg_dump is version $client; $label is PostgreSQL $server. pg_dump cannot read
+a server newer than itself.
+
+  Ubuntu: sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt \$(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt update && sudo apt install -y postgresql-client-$server
+
+  or run it inside the container:
+          docker exec -i <postgres-container> pg_dump …
+EOF
+    exit 1
+  fi
+}
+
+check_client_version "$PROD_URL"  "the production database"
+check_client_version "$LOCAL_URL" "the local database"
+
 out="$(mktemp -d)"
 trap 'rm -rf "$out"' EXIT
 
