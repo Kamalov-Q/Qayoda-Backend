@@ -15,6 +15,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   }
 
   validate(payload: AuthUser): AuthUser {
-    return { sub: payload.sub, role: payload.role };
+    // `iat` is kept, not dropped: it is what lets the guard tell a token
+    // minted before a logout from one minted after.
+    return { sub: payload.sub, role: payload.role, iat: payload.iat };
   }
 }

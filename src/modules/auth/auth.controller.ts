@@ -7,8 +7,14 @@ import {
   Param,
   ParseEnumPipe,
   Post,
+  BadRequestException,
+  Req,
+  Res,
+  UnauthorizedException,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import {
   ApiBearerAuth,
@@ -26,6 +32,12 @@ import { GoogleAuthService } from './services/google-auth.service';
 import { TelegramAuthService } from './services/telegram-auth.service';
 import { IdentityService } from './services/identity.service';
 import { TokenService } from './services/token.service';
+import { RefreshCookieInterceptor } from './interceptors/refresh-cookie.interceptor';
+import {
+  clearRefreshCookie,
+  refreshCookieFrom,
+  wantsCookieAuth,
+} from './auth-cookie';
 import {
   CheckPhoneDto,
   LinkPhoneDto,
@@ -41,6 +53,10 @@ import {
 
 @ApiTags('Auth')
 @Controller('auth')
+// Every token-issuing route on this controller routes its refresh token into
+// an httpOnly cookie for browser clients. See the interceptor for why it is
+// here and not on each handler.
+@UseInterceptors(RefreshCookieInterceptor)
 export class AuthController {
   constructor(
     private readonly phone: PhoneAuthService,
@@ -209,8 +225,17 @@ export class AuthController {
   @Post('refresh')
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @HttpCode(200)
-  refresh(@Body() dto: RefreshDto) {
-    return this.tokens.rotate(dto.refreshToken);
+  refresh(@Body() dto: RefreshDto, @Req() req: Request) {
+    // Cookie first, body second. A browser sends the cookie automatically
+    // and has nothing to put in the body — it cannot read the token it is
+    // presenting, which is the entire point. The mobile app sends a body and
+    // no cookie. One endpoint serves both without either knowing about the
+    // other.
+    const presented = refreshCookieFrom(req) ?? dto.refreshToken;
+    if (!presented) {
+      throw new UnauthorizedException({ code: 'TOKEN_MISSING' });
+    }
+    return this.tokens.rotate(presented);
   }
 
   @ApiOperation({
@@ -222,8 +247,75 @@ export class AuthController {
   @Post('logout')
   @UseGuards(JwtAccessGuard)
   @HttpCode(204)
-  async logout(@CurrentUser() user: AuthUser) {
+  async logout(
+    @CurrentUser() user: AuthUser,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     await this.tokens.revokeAllFor(user.sub);
+    // Revoking the row is not enough for a browser: a cookie left in place
+    // is a credential the next person at this computer presents on the next
+    // page load. It will fail — the row is revoked — but it will also look,
+    // to anyone reading logs, exactly like a replay attack.
+    if (wantsCookieAuth(req)) clearRefreshCookie(res);
+  }
+
+  // --------------------------------------------------------------- sessions
+
+  @ApiOperation({
+    summary: 'Signed-in devices',
+    description: [
+      'One entry per sign-in, newest first. A sign-in is a token FAMILY: rotation replaces the token and keeps the family, so a device open for a month is one entry here, not thirty.',
+      '',
+      '`current: true` marks the session making this request — identified from the refresh token presented alongside it, when there is one.',
+    ].join('\n'),
+  })
+  @ApiBearerAuth('access-token')
+  @Get('sessions')
+  @UseGuards(JwtAccessGuard)
+  sessions(@CurrentUser() user: AuthUser, @Req() req: Request) {
+    const presented = refreshCookieFrom(req);
+    return this.tokens.listSessions(user.sub, this.tokens.familyOf(presented));
+  }
+
+  @ApiOperation({
+    summary: 'End one session',
+    description: [
+      'Revokes one device without touching the others. The access token that device already holds keeps working until it expires — at most 15 minutes — because `tokens_valid_from` is per-account and using it here would sign out every device.',
+      '',
+      'To end everything at once, including access tokens, use `POST /auth/logout`.',
+    ].join('\n'),
+  })
+  @ApiBearerAuth('access-token')
+  @Delete('sessions/:familyId')
+  @UseGuards(JwtAccessGuard)
+  @HttpCode(204)
+  async endSession(
+    @CurrentUser() user: AuthUser,
+    @Param('familyId') familyId: string,
+  ) {
+    // Scoped to the caller's own id inside the service, so a guessed family
+    // id from another account matches nothing.
+    await this.tokens.revokeSession(user.sub, familyId);
+  }
+
+  @ApiOperation({
+    summary: 'End every other session',
+    description:
+      'Keeps the device making the request and signs out the rest. The one to offer after "was that you?" — it does not make the person re-authenticate on the device they are holding.',
+  })
+  @ApiBearerAuth('access-token')
+  @Post('sessions/revoke-others')
+  @UseGuards(JwtAccessGuard)
+  @HttpCode(204)
+  async revokeOthers(@CurrentUser() user: AuthUser, @Req() req: Request) {
+    const family = this.tokens.familyOf(refreshCookieFrom(req));
+    if (!family) {
+      // Without knowing which session is "this one", the only honest options
+      // are to end everything (surprising) or nothing. Say so instead.
+      throw new BadRequestException({ code: 'CURRENT_SESSION_UNKNOWN' });
+    }
+    await this.tokens.revokeOtherSessions(user.sub, family);
   }
 
   // ---------------------------------------------------------------- linking

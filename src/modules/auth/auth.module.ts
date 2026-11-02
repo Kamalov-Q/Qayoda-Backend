@@ -16,6 +16,7 @@ import { OptionalJwtGuard } from './guards/optional-jwt.guard';
 import { PhoneRequiredGuard } from './guards/phone-required.guard';
 import { AuthController } from './auth.controller';
 import { TelegramWebhookController } from './telegram-webhook.controller';
+import { User } from 'src/modules/users/entities/user.entity';
 import { AuthIdentity } from './entities/auth-identity.entity';
 import { PhoneOtpCode } from './entities/phone-otp-code.entity';
 import { TelegramSession } from './entities/telegram-session.entity';
@@ -36,6 +37,7 @@ import { RefreshToken } from './entities/refresh-token.entity';
       PhoneOtpCode,
       TelegramSession,
       RefreshToken,
+      User,
     ]),
     // Secrets are passed per sign/verify call, so there is nothing to register.
     JwtModule.register({}),

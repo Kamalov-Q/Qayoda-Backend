@@ -159,6 +159,25 @@ export class User {
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt: Date;
 
+  /**
+   * Access tokens issued before this moment are dead.
+   *
+   * The gap this closes: an access token is a signed claim nobody looks up,
+   * so logging out — which revokes refresh tokens — left the CURRENT access
+   * token working for up to its full 15 minutes. "Log out" on a shared
+   * computer did not actually log you out.
+   *
+   * A denylist of issued tokens would also work and costs a lookup on every
+   * request. This costs nothing: JwtAccessGuard already reads this row for
+   * status, role and deleted_at, with a 30-second cache, so the comparison
+   * rides along on a query that was happening anyway.
+   *
+   * Set by logout, by ban and by account deletion. Null means "never
+   * revoked", which is the normal state and skips the check entirely.
+   */
+  @Column({ name: 'tokens_valid_from', type: 'timestamptz', nullable: true })
+  tokensValidFrom: Date | null;
+
   @DeleteDateColumn({ name: 'deleted_at', type: 'timestamptz', nullable: true })
   deletedAt: Date | null;
 

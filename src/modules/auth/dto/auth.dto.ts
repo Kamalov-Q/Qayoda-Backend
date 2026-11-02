@@ -157,8 +157,23 @@ export class TelegramPollDto {
 }
 
 export class RefreshDto {
-  @ApiProperty({ description: 'The `refreshToken` from the last session response.' })
+  /**
+   * Optional, because a browser cannot supply it.
+   *
+   * Web clients present the token as an httpOnly cookie, which JavaScript
+   * cannot read — so their body is `{}`. Leaving this required meant the
+   * global ValidationPipe rejected every browser refresh with a 400 before
+   * the controller could look at the cookie at all.
+   *
+   * The controller requires one of the two and answers TOKEN_MISSING when
+   * neither arrives, so nothing is actually looser here.
+   */
+  @ApiPropertyOptional({
+    description:
+      'The `refreshToken` from the last session response. Omit it when the token is held in the `gc_rt` cookie (browser clients).',
+  })
+  @IsOptional()
   @IsString()
   @MinLength(20)
-  refreshToken: string;
+  refreshToken?: string;
 }

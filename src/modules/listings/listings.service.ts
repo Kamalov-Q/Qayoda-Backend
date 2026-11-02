@@ -214,10 +214,30 @@ export class ListingsService {
     return this.findById(listingId);
   }
 
-  async findById(id: string) {
+  /**
+   * One listing, for its public page.
+   *
+   * `viewerId` decides whether the seller's phone number comes back. The
+   * endpoint is public — a signed-out visitor and a crawler must both be
+   * able to read the listing, because that page is the site's entire search
+   * surface — but a phone number is not part of what has to be public.
+   *
+   * Before this, `contactPhone` was returned to anyone, so every number on
+   * the marketplace could be collected by walking listing IDs with no
+   * account at all. Gating it in the clients was not enough: they are not
+   * the boundary, this is.
+   *
+   * The owner is exempt, which is not a special case so much as the same
+   * rule: they are signed in, and they need their own number to edit it.
+   */
+  async findById(id: string, viewerId?: string | null) {
     const listing = await this.listings.findWithRelations(id);
     if (!listing) throw new NotFoundException('Listing not found');
-    return { ...listing, owner: await this.ownerCard(listing.ownerId) };
+    return {
+      ...listing,
+      contactPhone: viewerId ? listing.contactPhone : null,
+      owner: await this.ownerCard(listing.ownerId),
+    };
   }
 
   /**
@@ -287,44 +307,75 @@ export class ListingsService {
     return listings.map((l) => ({ ...l, sale: byListing.get(l.id) ?? null }));
   }
 
+  /**
+   * Strips the seller's phone from a list of listings.
+   *
+   * Applied to every PUBLIC list — the feed, the home strip, similar
+   * listings. None of them displays a phone number in any client: mobile
+   * reads it from the detail endpoint (the map preview sheet included, via
+   * useListing), and the website asks for it on click. So the field was pure
+   * exposure, and the worst kind: one request to the feed returned a page of
+   * numbers at a time, which is how a marketplace's sellers end up in
+   * somebody's spam list.
+   *
+   * Not applied to `findMine`, which is owner-only and whose whole point is
+   * the owner's own data.
+   *
+   * It runs INSIDE the cached path on purpose. Stripping afterwards would
+   * mean the full numbers sat in the shared cache, and making the cache key
+   * depend on the viewer would multiply every entry by the number of
+   * visitors — the two classic ways to turn this fix into a worse bug.
+   */
+  private withoutPhones<T extends { contactPhone: string | null }>(
+    rows: T[],
+  ): T[] {
+    return rows.map((l) => ({ ...l, contactPhone: null }));
+  }
+
   findFeed(dto: ListListingsDto) {
     return this.cache.wrap(`feed:${JSON.stringify(dto)}`, 15_000, () =>
       this.uncachedFeed(dto),
     );
   }
 
-  private uncachedFeed(dto: ListListingsDto) {
-    return this.listings.findFeed({
-      purpose: dto.purpose,
-      category: dto.category,
-      priceMin: dto.priceMin,
-      priceMax: dto.priceMax,
-      search: dto.q?.trim() || undefined,
-      address: dto.address?.trim() || undefined,
-      centerLng: dto.centerLng,
-      centerLat: dto.centerLat,
-      radiusM: dto.radiusM,
-      sort: dto.sort ?? 'newest',
-      limit: Math.min(dto.limit ?? 20, 50),
-      offset: dto.offset ?? 0,
-    });
+  private async uncachedFeed(dto: ListListingsDto) {
+    return this.withoutPhones(
+      await this.listings.findFeed({
+        purpose: dto.purpose,
+        category: dto.category,
+        priceMin: dto.priceMin,
+        priceMax: dto.priceMax,
+        search: dto.q?.trim() || undefined,
+        address: dto.address?.trim() || undefined,
+        centerLng: dto.centerLng,
+        centerLat: dto.centerLat,
+        radiusM: dto.radiusM,
+        sort: dto.sort ?? 'newest',
+        limit: Math.min(dto.limit ?? 20, 50),
+        offset: dto.offset ?? 0,
+      }),
+    );
   }
 
   findSimilar(id: string, limit: number) {
     return this.cache.wrap(`similar:${id}:${limit}`, 60_000, async () => {
       const anchor = await this.listings.findWithRelations(id);
       if (!anchor) throw new NotFoundException('Listing not found');
-      return this.listings.findSimilar(
-        anchor,
-        Math.min(Math.max(limit, 1), 12),
+      return this.withoutPhones(
+        await this.listings.findSimilar(
+          anchor,
+          Math.min(Math.max(limit, 1), 12),
+        ),
       );
     });
   }
 
   /** Clamped so a crafted limit cannot pull the whole table. */
   findLatest(limit: number) {
-    return this.cache.wrap(`latest:${limit}`, 30_000, () =>
-      this.listings.findLatest(Math.min(Math.max(limit, 1), 30)),
+    return this.cache.wrap(`latest:${limit}`, 30_000, async () =>
+      this.withoutPhones(
+        await this.listings.findLatest(Math.min(Math.max(limit, 1), 30)),
+      ),
     );
   }
 
@@ -612,7 +663,12 @@ export class ListingsService {
         'LISTING_PROMOTE',
         tariffId,
       );
-      await this.wallet.chargeTariff(manager, listing.ownerId, tariff, listing.id);
+      await this.wallet.chargeTariff(
+        manager,
+        listing.ownerId,
+        tariff,
+        listing.id,
+      );
       // Extended in SQL from the row's CURRENT value, not the copy the guard
       // loaded: two promotions at once must add up to fourteen days, not
       // charge twice for the same seven.

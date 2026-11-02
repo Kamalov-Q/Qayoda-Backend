@@ -1,4 +1,5 @@
 import { ValidationPipe } from '@nestjs/common';
+import cookieParser from 'cookie-parser';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { PaynetParseErrorFilter } from './modules/billing/providers/paynet/paynet-parse-error.filter';
@@ -31,7 +32,60 @@ async function bootstrap() {
     }),
   );
 
-  app.enableCors({ origin: true, credentials: true });
+  /**
+   * CORS: an allowlist, not a mirror.
+   *
+   * This was `{ origin: true, credentials: true }`, which reflects whatever
+   * Origin the caller sends and tells the browser credentials are welcome.
+   * That was survivable while every client authenticated with a Bearer token
+   * held in app memory — a third-party page could make the request but had
+   * no token to attach, so it got nothing useful back.
+   *
+   * It stops being survivable the moment the web app keeps its refresh token
+   * in a cookie, because the browser attaches cookies by itself. Reflecting
+   * any origin with credentials enabled would then let ANY website call
+   * /api/auth/refresh with the visitor's cookie and read the access token
+   * out of the response. That is full account takeover from a page the user
+   * merely visited.
+   *
+   * So: named origins only. Requests with NO Origin header — the mobile app,
+   * curl, the payment providers' server-to-server webhooks — are allowed
+   * through untouched, because CORS is a browser mechanism and has nothing
+   * to say about them.
+   */
+  const allowedOrigins = (process.env.CORS_ORIGINS ?? '')
+    .split(',')
+    .map((o) => o.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
+
+  app.enableCors({
+    origin(origin, callback) {
+      // No Origin: not a browser. Native app, webhook, health check, curl.
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin.replace(/\/+$/, ''))) {
+        return callback(null, true);
+      }
+      // Outside production nothing is deployed and localhost ports move
+      // around; refusing them turns every front-end experiment into a CORS
+      // hunt. Production is strict.
+      if (process.env.NODE_ENV !== 'production') return callback(null, true);
+      // `callback(null, false)` — NOT an Error. Throwing produces a 500,
+      // which is both a lie (the server is fine) and noise in whatever
+      // watches the error rate. Answering WITHOUT the
+      // Access-Control-Allow-Origin header is the correct refusal: the
+      // browser then refuses to hand the response to the calling script,
+      // and that is the entire enforcement mechanism. CORS is a rule the
+      // browser applies, not a server-side gate.
+      return callback(null, false);
+    },
+    credentials: true,
+    // Browser clients send this to ask for cookie auth; without it listed,
+    // the preflight fails and the header never arrives.
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Auth-Mode'],
+  });
+
+  // Needed before any route can read the refresh cookie.
+  app.use(cookieParser());
 
   // All REST routes are prefixed with /api (e.g., /api/click/prepare).
   // The Click merchant dashboard is configured with /api in the webhook URLs,

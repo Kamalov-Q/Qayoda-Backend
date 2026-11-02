@@ -25,6 +25,7 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { ListingsService } from './listings.service';
+import { OptionalJwtGuard } from '../auth/guards/optional-jwt.guard';
 import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
 import { PhoneRequiredGuard } from '../auth/guards/phone-required.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -248,9 +249,20 @@ export class ListingsController {
     return this.listingsService.findSimilar(id, limit);
   }
 
+  /**
+   * `OptionalJwtGuard`, not `JwtAccessGuard`: this page must stay readable
+   * by a signed-out visitor and by a crawler — it is the whole public
+   * surface of the marketplace. The guard only tells the service WHO is
+   * asking, so it can decide whether the seller's phone comes back.
+   */
+  @ApiBearerAuth('access-token')
+  @UseGuards(OptionalJwtGuard)
   @Get(':id')
-  findById(@Param('id', ParseUUIDPipe) id: string) {
-    return this.listingsService.findById(id);
+  findById(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: { user?: { sub?: string } | null },
+  ) {
+    return this.listingsService.findById(id, req.user?.sub ?? null);
   }
 
   @ApiOperation({
