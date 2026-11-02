@@ -24,23 +24,9 @@ export const typeOrmConfig = async (): Promise<TypeOrmModuleOptions> => {
     url,
     ssl,
     autoLoadEntities: true,
-    /**
-     * Off. Everywhere. Migrations are the mechanism now — see MIGRATIONS.md.
-     *
-     * It was `NODE_ENV !== 'production'`, which sounds cautious and is not.
-     * A dev server running with `--watch` reshapes the schema from the
-     * entities on every reload, so it does not merely drift from production
-     * — it actively UNDOES anything a migration has done that the entities
-     * do not yet describe. Writing the organizations migration against a
-     * running dev server, it reverted the wallets re-key three times in a
-     * row and renamed the primary key back to its own PK_<hash> form.
-     *
-     * Having two mechanisms is worse than having the worse one: whichever
-     * ran last wins, and nothing records which that was.
-     *
-     * Local setup is now the same as production: `npm run db:run`.
-     */
-    synchronize: false,
+    // Convenient locally, destructive anywhere real: it will happily drop a
+    // column whose entity field was renamed. Production needs migrations.
+    synchronize: process.env.NODE_ENV !== 'production',
     logging: process.env.NODE_ENV === 'development',
   };
 };
