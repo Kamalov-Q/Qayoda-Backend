@@ -7,7 +7,7 @@ import { Roles, RolesGuard } from '../../shared/guards/roles.guard';
 import { UserRole } from '../../shared/enums';
 import { BillingAdminService } from './billing-admin.service';
 import {
-    AdjustWalletDto, AdminAdjustmentsQueryDto, AdminPaymentsQueryDto, CreateBonusTierDto, CreateTariffDto, PageQueryDto, PatchBonusTierDto, PatchTariffDto,
+    AdjustWalletDto, AdminAdjustmentsQueryDto, AdminFreeGrantsQueryDto, AdminPaymentsQueryDto, CreateBonusTierDto, CreateTariffDto, PageQueryDto, PatchBonusTierDto, PatchTariffDto,
 } from './dto/billing.dto';
 
 @ApiTags('admin-billing')
@@ -70,5 +70,27 @@ export class BillingAdminController {
     @Post('wallets/:userId/adjust')
     adjust(@CurrentUser() admin: AuthUser, @Param('userId', ParseUUIDPipe) userId: string, @Body() dto: AdjustWalletDto) {
         return this.admin.adjustWallet(admin.sub, userId, dto);
+    }
+
+    /**
+     * Who has used their free first post.
+     *
+     * Only used grants are rows, so an account absent from this list still
+     * has its free go. `actions` in the response names the eligible set, so
+     * the dashboard does not hardcode LISTING_POST.
+     */
+    @Get('free-grants')
+    listFreeGrants(@Query() q: AdminFreeGrantsQueryDto) {
+        return this.admin.listFreeGrants(
+            { q: q.q, userId: q.userId, action: q.action },
+            q.limit,
+            q.offset,
+        );
+    }
+
+    /** Give the free post back. 404 when they never used it. */
+    @Delete('free-grants/:userId/:action')
+    resetFreeGrant(@Param('userId', ParseUUIDPipe) userId: string, @Param('action') action: string) {
+        return this.admin.resetFreeGrant(userId, action);
     }
 }

@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional, OmitType, PartialType } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import { IsBoolean, IsEnum, IsIn, IsInt, Matches, IsUUID, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min, NotEquals } from "class-validator";
-import { PaymentProviderKind, PaymentStatus, TARIFF_ACTION_RE, TARIFF_ACTIONS, TOPUP_MAX, TOPUP_MIN } from "../billing.constants";
+import { FIRST_FREE_ACTIONS, PaymentProviderKind, PaymentStatus, TARIFF_ACTION_RE, TARIFF_ACTIONS, TOPUP_MAX, TOPUP_MIN } from "../billing.constants";
 
 export class TopupDto {
     @ApiProperty({ example: 2000, description: "so'm" })
@@ -196,3 +196,23 @@ export class AdjustWalletDto {
     clientId?: string;
 }
 
+export class AdminFreeGrantsQueryDto extends PageQueryDto {
+    @ApiPropertyOptional({ description: 'Matches name, surname or phone number.' })
+    @IsOptional()
+    @IsString()
+    @MaxLength(80)
+    q?: string;
+
+    @ApiPropertyOptional({ format: 'uuid', description: 'Only this account — what the user drawer asks.' })
+    @IsOptional()
+    @IsUUID()
+    userId?: string;
+
+    @ApiPropertyOptional({
+        enum: FIRST_FREE_ACTIONS,
+        description: `Only this action. Today the only one with a free first use is ${FIRST_FREE_ACTIONS.join(', ')}.`,
+    })
+    @IsOptional()
+    @IsIn([...FIRST_FREE_ACTIONS])
+    action?: string;
+}

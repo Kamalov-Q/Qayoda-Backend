@@ -6,7 +6,8 @@ import { WalletTransaction } from "./entities/wallet-transaction.entity";
 import { Tariff } from "./entities/tariff.entity";
 import { BonusTier } from "./entities/bonus-tier.entity";
 import { Payment } from "./entities/payment.entity";
-import { fromTiyin, TariffAction, toTiyin, TxKind } from "./billing.constants";
+import { FIRST_FREE_ACTIONS, fromTiyin, isFirstFreeAction, TariffAction, toTiyin, TxKind } from "./billing.constants";
+import { FreeGrant } from "./entities/free-grant.entity";
 import { User } from "../users/entities/user.entity";
 import { UserRole } from "src/shared/enums";
 
@@ -38,15 +39,25 @@ export class WalletService {
 
     async overview(userId: string) {
         const balance = await this.getBalance(this.dataSource.manager, userId);
-        const [accountNo, tariffs, bonusTiers] = await Promise.all([
+        const [accountNo, tariffs, bonusTiers, freeActions] = await Promise.all([
             this.accountNo(userId),
             this.tariffs.find({ where: { isActive: true }, order: { action: 'ASC', price: 'ASC' } }),
-            this.tiers.find({ where: { isActive: true }, order: { minAmount: 'ASC' } })
+            this.tiers.find({ where: { isActive: true }, order: { minAmount: 'ASC' } }),
+            this.freeActionsFor(this.dataSource.manager, userId),
         ]);
 
         return {
             balance,
             accountNo,
+            /**
+             * Which first-use-free actions this account has NOT spent yet.
+             *
+             * Here rather than on /tariffs because it is per-account and
+             * /tariffs is deliberately public and cached for minutes — a
+             * price is not a secret, but whose freebie is unspent is not a
+             * price. This endpoint is already Cache-Control: no-store.
+             */
+            freeActions,
             tariffs: tariffs.map((t) => ({
                 id: t.id, action: t.action, nameUz: t.nameUz, nameRu: t.nameRu, price: t.price, durationDays: t.durationDays,
             })),
@@ -166,11 +177,63 @@ export class WalletService {
             return;
         }
 
+        // LAST thing before the money moves. Everything above has already
+        // ruled out the cases where nothing would have been charged anyway
+        // (admin, no tariff, zero price) — claiming the grant before those
+        // checks would spend it on a free action and then charge the account
+        // for its real first one.
+        if (isFirstFreeAction(tariff.action) && await this.claimFreeAction(manager, userId, tariff.action, referenceId)) {
+            this.log.log(`FREE ${tariff.action} for ${userId}: first one on the house (${tariff.price} waived)`);
+            return;
+        }
+
         this.log.log(
             `CHARGE ${tariff.action} ${tariff.price} to ${userId}` +
             `${referenceId ? ` ref=${referenceId}` : ''} tariff=${tariff.id}`,
         );
         await this.debit(manager, userId, priceTiyin, tariff.action as unknown as TxKind, referenceId ?? null, tariff.nameUz);
+    }
+
+    /**
+     * Spend this account's free go at `action`, if it still has one.
+     *
+     * True = it was unspent and is now spent, so the caller must NOT charge.
+     *
+     * `ON CONFLICT DO NOTHING` with `RETURNING` is the whole concurrency
+     * story: the composite primary key makes two simultaneous posts race on
+     * one row, the loser gets zero rows back and pays. Reading first and then
+     * inserting would let both through.
+     *
+     * Runs on the caller's `manager`, so it is inside the listing's
+     * transaction: if anything after the charge fails, the listing and the
+     * claim roll back together and the account keeps its free post. There is
+     * no refund path to get it back by hand — see resetFreeAction, which is
+     * the admin's.
+     */
+    private async claimFreeAction(
+        manager: EntityManager, userId: string, action: string, referenceId?: string,
+    ): Promise<boolean> {
+        const [rows]: [{ user_id: string }[], number] = await manager.query(
+            `INSERT INTO free_grants (user_id, action, reference_id)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (user_id, action) DO NOTHING
+            RETURNING user_id
+            `,
+            [userId, action, referenceId ?? null],
+        );
+        return rows.length > 0;
+    }
+
+    /**
+     * The first-use-free actions this account has left, for the app to label
+     * the post form with. Only ever a handful of codes, so one read of the
+     * used rows and a subtraction beats a query per action.
+     */
+    async freeActionsFor(manager: EntityManager, userId: string): Promise<string[]> {
+        if (FIRST_FREE_ACTIONS.length === 0) return [];
+        const used = await manager.find(FreeGrant, { where: { userId }, select: { action: true } });
+        const spent = new Set(used.map((g) => g.action));
+        return FIRST_FREE_ACTIONS.filter((a) => !spent.has(a));
     }
 
     async refund(

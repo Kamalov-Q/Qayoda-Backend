@@ -3,12 +3,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, IsNull, Not, Repository, SelectQueryBuilder } from 'typeorm';
 import { User } from '../users/entities/user.entity';
 import { WalletTransaction } from './entities/wallet-transaction.entity';
-import { PaymentProviderKind, PaymentStatus, TxKind, fromTiyin, isBuiltInAction, isTimedAction, toTiyin } from './billing.constants';
+import { FIRST_FREE_ACTIONS, PaymentProviderKind, PaymentStatus, TxKind, fromTiyin, isBuiltInAction, isFirstFreeAction, isTimedAction, toTiyin } from './billing.constants';
 import { AdjustWalletDto, CreateBonusTierDto, CreateTariffDto, PatchBonusTierDto, PatchTariffDto } from './dto/billing.dto';
 import { BonusTier } from './entities/bonus-tier.entity';
 import { Payment } from './entities/payment.entity';
 import { Tariff } from './entities/tariff.entity';
 import { Wallet } from './entities/wallet.entity';
+import { FreeGrant } from './entities/free-grant.entity';
 import { WalletService } from './wallet.service';
 
 /** One row of the manual-adjustment history, as the raw query returns it. */
@@ -29,6 +30,17 @@ export interface AdjustmentRow {
     adminPhone: string | null;
 }
 
+/** One used free go, with the account that used it named. */
+export interface FreeGrantRow {
+    userId: string;
+    action: string;
+    referenceId: string | null;
+    usedAt: Date;
+    userName: string | null;
+    userSurname: string | null;
+    userPhone: string | null;
+}
+
 @Injectable()
 export class BillingAdminService {
     constructor(
@@ -39,6 +51,7 @@ export class BillingAdminService {
         @InjectRepository(Payment) private readonly payments: Repository<Payment>,
         @InjectRepository(Wallet) private readonly wallets: Repository<Wallet>,
         @InjectRepository(WalletTransaction) private readonly txs: Repository<WalletTransaction>,
+        @InjectRepository(FreeGrant) private readonly freeGrants: Repository<FreeGrant>,
     ) { }
 
     // ─── tariffs ──────────────────────────────────────────────────────────
@@ -394,5 +407,94 @@ export class BillingAdminService {
 
             return { userId, balance, repeated: false };
         });
+    }
+
+    // ─── first-post-free grants ───────────────────────────────────────────
+
+    /**
+     * Who has used their free go, newest first.
+     *
+     * Only USED grants exist as rows, so this is the complete answer to "who
+     * has had their freebie" — an account missing from it still has one. The
+     * user is joined by hand for the same reason listAdjustments does it: a
+     * screen listing bare UUIDs answers nothing it is opened to ask.
+     *
+     * `q` matches name, surname or phone, so the admin can check one person
+     * without knowing their id; `userId` is the exact-account filter the
+     * user drawer uses.
+     */
+    async listFreeGrants(
+        filters: { q?: string; userId?: string; action?: string },
+        limit: number,
+        offset: number,
+    ) {
+        const scoped = (): SelectQueryBuilder<FreeGrant> => {
+            const qb = this.freeGrants.createQueryBuilder('g').leftJoin(User, 'u', 'u.id = g.userId');
+            if (filters.userId) qb.andWhere('g.userId = :userId', { userId: filters.userId });
+            if (filters.action) qb.andWhere('g.action = :action', { action: filters.action });
+            const q = filters.q?.trim();
+            if (q) {
+                qb.andWhere(
+                    `(u.name ILIKE :q OR u.surname ILIKE :q OR u.phone_number ILIKE :q)`,
+                    { q: `%${q}%` },
+                );
+            }
+            return qb;
+        };
+
+        const page = scoped()
+            .select('g.userId', 'userId')
+            .addSelect('g.action', 'action')
+            .addSelect('g.referenceId', 'referenceId')
+            .addSelect('g.usedAt', 'usedAt')
+            .addSelect('u.name', 'userName')
+            .addSelect('u.surname', 'userSurname')
+            .addSelect('u.phoneNumber', 'userPhone')
+            .orderBy('g.usedAt', 'DESC')
+            .limit(limit)
+            .offset(offset);
+
+        const [items, total] = await Promise.all([
+            page.getRawMany<FreeGrantRow>(),
+            scoped().getCount(),
+        ]);
+
+        // The app reads this list to decide what to label, so the admin
+        // screen states the same set rather than hardcoding 'LISTING_POST'.
+        return { items, total, limit, offset, actions: [...FIRST_FREE_ACTIONS] };
+    }
+
+    /**
+     * Give an account its free go back.
+     *
+     * Deleting the row IS the reset: no row means unspent. Used when support
+     * has agreed somebody's first post should not have counted — a failed
+     * listing that still went through, a test post, a goodwill call.
+     *
+     * Nothing is refunded here and nothing needs to be: a claimed grant
+     * never moved money, so there is no ledger entry to reverse. If they
+     * were CHARGED and should not have been, that is an admin adjust, not
+     * this.
+     *
+     * Not idempotent on purpose — a reset that silently does nothing would
+     * let an admin believe they had granted something twice. The 404 says
+     * "they already have it".
+     */
+    async resetFreeGrant(userId: string, action: string) {
+        if (!isFirstFreeAction(action)) {
+            throw new BadRequestException({
+                code: 'ACTION_NOT_FREE_ELIGIBLE',
+                message: `${action} has no free first use; eligible: ${FIRST_FREE_ACTIONS.join(', ')}`,
+            });
+        }
+
+        const result = await this.freeGrants.delete({ userId, action });
+        if (!result.affected) {
+            throw new NotFoundException({
+                code: 'FREE_GRANT_NOT_USED',
+                message: 'This account has not used its free post, so there is nothing to reset',
+            });
+        }
+        return { userId, action, reset: true };
     }
 } 

@@ -12,6 +12,7 @@ import { Payment } from './entities/payment.entity';
 import { Tariff } from './entities/tariff.entity';
 import { WalletTransaction } from './entities/wallet-transaction.entity';
 import { Wallet } from './entities/wallet.entity';
+import { FreeGrant } from './entities/free-grant.entity';
 import { PaymentsService } from './payments.service';
 import { ClickWebhookController } from './providers/click/click.controller';
 import { ClickProvider } from './providers/click/click.provider';
@@ -32,7 +33,7 @@ import { TariffsController } from './tariffs.controller';
     imports: [
     InboxModule,
         AuthModule,
-        TypeOrmModule.forFeature([Wallet, WalletTransaction, Payment, PaymentWebhookEvent, Tariff, BonusTier, User]),
+        TypeOrmModule.forFeature([Wallet, WalletTransaction, Payment, PaymentWebhookEvent, Tariff, BonusTier, FreeGrant, User]),
     ],
     controllers: [WalletController, TariffsController, ClickWebhookController, PaymeWebhookController, PaynetWebhookController, BillingAdminController],
     providers: [

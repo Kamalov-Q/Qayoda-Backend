@@ -15,6 +15,23 @@ export const isBuiltInAction = (action: string): action is TariffAction =>
 export const TIMED_ACTIONS: readonly string[] = ['LISTING_PROMOTE'];
 export const isTimedAction = (action: string) => TIMED_ACTIONS.includes(action);
 
+/**
+ * Actions whose FIRST use per account is on the house.
+ *
+ * The grant is claimed in WalletService.chargeTariff, at the last moment
+ * before the debit — after the admin check and after the zero-price check.
+ * That placement is the point: an account must not burn its free post on an
+ * action that was unpriced or free anyway, and then be charged for its real
+ * first one once a price is set.
+ *
+ * Per ACCOUNT, not per phone or device. Creating a listing is behind
+ * PhoneRequiredGuard (listings.controller.ts), so farming these costs one
+ * SIM each — which is the floor, and the reason that guard must stay.
+ */
+export const FIRST_FREE_ACTIONS: readonly TariffAction[] = ['LISTING_POST'];
+export const isFirstFreeAction = (action: string): boolean =>
+    (FIRST_FREE_ACTIONS as readonly string[]).includes(action);
+
 /** What an admin-typed action code must look like. */
 export const TARIFF_ACTION_RE = /^[A-Z][A-Z0-9_]{1,39}$/;
 
