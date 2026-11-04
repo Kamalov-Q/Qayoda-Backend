@@ -24,6 +24,23 @@ export class TopupDto {
     @IsUUID()
     clientId?: string;
 
+    @ApiPropertyOptional({
+        enum: ['uz', 'ru'],
+        description: "The payer's language, for providers whose checkout can be opened in one. Defaults to Uzbek.",
+    })
+    @IsOptional()
+    @IsIn(['uz', 'ru'])
+    lang?: 'uz' | 'ru';
+
+    @ApiPropertyOptional({
+        enum: ['APP', 'WEB'],
+        description:
+            'Where the payer is paying from. It chooses between the return addresses this server is configured with — the app deep link, or the website page. It is NOT a URL: one taken from the request would be an open redirect on a payment page.',
+    })
+    @IsOptional()
+    @IsIn(['APP', 'WEB'])
+    client?: 'APP' | 'WEB';
+
 }
 
 export class PaynetLinkQueryDto {

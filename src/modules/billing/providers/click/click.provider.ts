@@ -5,7 +5,7 @@ import { FiscalStatus, PaymentProviderKind, PaymentStatus, toTiyin } from '../..
 import { Payment } from '../../entities/payment.entity';
 import { FiscalService } from '../../fiscal.service';
 import { PaymentsService } from '../../payments.service';
-import { PaymentProvider } from '../payment-provider';
+import { PaymentProvider, PayUrlOptions } from '../payment-provider';
 
 // ─── Click Shop API (docs.click.uz → Click-API Request), verified on service 85772 ──
 
@@ -53,7 +53,10 @@ export class ClickProvider implements PaymentProvider {
     private readonly fiscal: FiscalService,
   ) {}
 
-  buildPayUrl(payment: Payment): string {
+  buildPayUrl(payment: Payment, options: PayUrlOptions = {}): string {
+    // No language parameter: Click's checkout follows the payer's own
+    // account, so `options.lang` has nothing to set here.
+    const web = this.config.get<string>('CLICK_RETURN_URL_WEB');
     const params = new URLSearchParams({
       service_id: this.config.getOrThrow<string>('CLICK_SERVICE_ID'),
       merchant_id: this.config.getOrThrow<string>('CLICK_MERCHANT_ID'),
@@ -61,7 +64,13 @@ export class ClickProvider implements PaymentProvider {
       // Click requires a numeric transaction_param (UUID is rejected).
       // prepareId is an auto-increment integer assigned at insert time.
       transaction_param: String(payment.prepareId),
-      return_url: this.config.getOrThrow<string>('CLICK_RETURN_URL'),
+      // The app's return address is a deep link, which a desktop browser
+      // cannot follow. `CLICK_RETURN_URL_WEB` is optional — unset, this is
+      // exactly what it was.
+      return_url:
+        options.client === 'WEB' && web
+          ? web
+          : this.config.getOrThrow<string>('CLICK_RETURN_URL'),
     });
     return `${CLICK_PAY_URL}?${params.toString()}`;
   }

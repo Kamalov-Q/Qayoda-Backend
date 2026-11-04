@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { fromTiyin, PaymentProviderKind, toTiyin } from "./billing.constants";
-import { PAYMENT_PROVIDERS, PaymentProvider } from "./providers/payment-provider";
+import { PAYMENT_PROVIDERS, PaymentProvider, PayUrlOptions } from "./providers/payment-provider";
 import { DataSource, Repository } from 'typeorm';
 import { WalletService } from "./wallet.service";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -24,7 +24,7 @@ export class TopupService {
     }
 
 
-    async createTopup(userId: string, amountSum: number, kind: PaymentProviderKind, clientId?: string) {
+    async createTopup(userId: string, amountSum: number, kind: PaymentProviderKind, clientId?: string, payUrlOptions?: PayUrlOptions) {
         const provider = this.providers.get(kind);
         if (!provider) throw new BadRequestException({ code: 'PROVIDER_UNAVAILABLE', message: `${kind} is not enabled` });
 
@@ -36,7 +36,7 @@ export class TopupService {
             paymentId: payment.id,
             status: payment.status,
             provider: kind,
-            payUrl: provider.buildPayUrl(payment),
+            payUrl: provider.buildPayUrl(payment, payUrlOptions),
             bonusPreview: { percent: bonus.percent, amount: fromTiyin(bonus.bonusTiyin) }
         }
     }

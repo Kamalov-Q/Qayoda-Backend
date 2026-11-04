@@ -5,7 +5,7 @@ import { FiscalStatus, PaymentProviderKind, PaymentStatus, toTiyin } from '../..
 import { Payment } from '../../entities/payment.entity';
 import { FiscalService } from '../../fiscal.service';
 import { PaymentsService, ReversalNotPossibleError } from '../../payments.service';
-import { PaymentProvider } from '../payment-provider';
+import { PaymentProvider, PayUrlOptions } from '../payment-provider';
 
 // ─── Payme Merchant API (developer.help.paycom.uz) ────────────────────────
 
@@ -84,16 +84,31 @@ export class PaymeProvider implements PaymentProvider {
         private readonly fiscal: FiscalService,
     ) { }
 
-    buildPayUrl(payment: Payment): string {
+    buildPayUrl(payment: Payment, options: PayUrlOptions = {}): string {
         const params = [
             `m=${this.config.getOrThrow<string>('PAYME_MERCHANT_ID')}`,
             `ac.payment_id=${payment.id}`,
             `a=${toTiyin(payment.amount)}`,
-            'l=uz',
-            `c=${this.config.getOrThrow<string>('PAYME_RETURN_URL')}`,
+            // Was hardcoded to Uzbek, so a Russian-speaking payer met an
+            // Uzbek checkout. Still Uzbek when nobody says otherwise.
+            `l=${options.lang === 'ru' ? 'ru' : 'uz'}`,
+            `c=${this.returnUrl(options.client)}`,
             'ct=3000',
         ].join(';');
         return `${this.config.getOrThrow<string>('PAYME_CHECKOUT_URL')}/${Buffer.from(params).toString('base64')}`;
+    }
+
+    /**
+     * Where Payme sends the payer afterwards.
+     *
+     * One address per client, because they are different places: the app's
+     * is a deep link and the website's is a page. `PAYME_RETURN_URL_WEB`
+     * is optional — without it the behaviour is exactly what it was.
+     */
+    private returnUrl(client: PayUrlOptions['client']): string {
+        const web = this.config.get<string>('PAYME_RETURN_URL_WEB');
+        if (client === 'WEB' && web) return web;
+        return this.config.getOrThrow<string>('PAYME_RETURN_URL');
     }
 
     async handleRpc(authHeader: string | undefined, body: Rpc): Promise<RpcResponse> {

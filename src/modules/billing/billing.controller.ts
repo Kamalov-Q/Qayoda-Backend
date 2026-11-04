@@ -46,7 +46,10 @@ export class WalletController {
     @Post('topup')
     @UseGuards(PhoneRequiredGuard)
     createTopup(@CurrentUser() user: AuthUser, @Body() dto: TopupDto) {
-        return this.topup.createTopup(user.sub, dto.amount, dto.provider, dto.clientId);
+        return this.topup.createTopup(user.sub, dto.amount, dto.provider, dto.clientId, {
+            lang: dto.lang,
+            client: dto.client,
+        });
     }
 
     /** Paynet checkout link for this user's account number; the app opens it. */
