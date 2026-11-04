@@ -213,7 +213,16 @@ export class WalletService {
     private async claimFreeAction(
         manager: EntityManager, userId: string, action: string, referenceId?: string,
     ): Promise<boolean> {
-        const [rows]: [{ user_id: string }[], number] = await manager.query(
+        // NOT `const [rows] = await …`. On Postgres, TypeORM's query()
+        // returns the rows array itself, so destructuring takes the FIRST
+        // ROW — an object whose `.length` is undefined, making `> 0` false
+        // and this method answer "not claimed" about the claim it just
+        // wrote. The caller then charges, the empty wallet throws
+        // INSUFFICIENT_FUNDS, and the row rolls back with it: the account
+        // is refused AND keeps a grant that never shows up anywhere.
+        // user-notifications.service.ts does the same INSERT … RETURNING
+        // without destructuring; this now matches it.
+        const rows: { user_id: string }[] = await manager.query(
             `INSERT INTO free_grants (user_id, action, reference_id)
             VALUES ($1, $2, $3)
             ON CONFLICT (user_id, action) DO NOTHING
