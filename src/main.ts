@@ -81,7 +81,19 @@ async function bootstrap() {
     credentials: true,
     // Browser clients send this to ask for cookie auth; without it listed,
     // the preflight fails and the header never arrives.
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Auth-Mode'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Auth-Mode',
+      // Sent by the web client on POST /listings/:id/view, so a view
+      // can be counted once per device when nobody is signed in. A
+      // custom header makes that request non-simple, so the browser
+      // preflights it and drops the POST entirely unless the name is
+      // listed here — which it was not, so web views were never
+      // counted. The app was unaffected: a native client sends no
+      // Origin, so there is no preflight.
+      'X-Device-Id',
+    ],
   });
 
   // Needed before any route can read the refresh cookie.
