@@ -23,12 +23,15 @@ export enum ListingVideoFailReason {
 }
 
 /**
- * Three minutes, where a reel gets one.
+ * Three minutes — the same ceiling a reel now gets.
  *
- * Different limit because it is a different job. A reel has to stop a thumb
- * mid-scroll, and sixty seconds is already generous for that. A tour is
- * watched on purpose by somebody deciding whether to visit, and a two-bedroom
- * flat cannot be walked through in a minute without the camera running.
+ * The two limits were different when a reel was a minute: a reel has to stop
+ * a thumb mid-scroll, a tour is watched on purpose by somebody deciding
+ * whether to visit, and a two-bedroom flat cannot be walked through in a
+ * minute without the camera running. The reel limit has since been raised to
+ * meet this one. They stay separate constants because they answer to
+ * different features and may diverge again — not because the numbers differ
+ * today.
  */
 export const LISTING_VIDEO_MAX_DURATION_SEC = 180;
 /** Phones round a 180.4 s recording to "3:00"; refusing it would be pedantry. */

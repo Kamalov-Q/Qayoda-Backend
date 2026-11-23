@@ -42,10 +42,22 @@ export const BUNNY_VIDEO_STATUS = {
   UPLOAD_FAILED: 6,
 } as const;
 
-/** The product rule: a reel is a minute at most. */
-export const VIDEO_MAX_DURATION_SEC = 60;
-/** Phones round a 60.4 s recording to "1:00"; refusing it would be pedantry. */
-export const VIDEO_DURATION_SLACK_SEC = 1;
+/**
+ * The product rule: a reel is three minutes at most.
+ *
+ * Raised from sixty seconds, which was the shape of the feed rather than the
+ * shape of the job. A clip that stops a thumb mid-scroll is still ten
+ * seconds long — but the people filming here are selling flats, and the one
+ * that convinces somebody to visit is a walk through the rooms, which does
+ * not fit in a minute.
+ *
+ * Enforced on the ENCODED file, by the webhook, against the number Bunny
+ * reports. Nothing is charged before that check passes, so a clip that is
+ * over costs its author nothing but the upload.
+ */
+export const VIDEO_MAX_DURATION_SEC = 180;
+/** Phones round a 180.4 s recording to "3:00"; refusing it would be pedantry. */
+export const VIDEO_DURATION_SLACK_SEC = 2;
 
 export const VIDEO_UPLOAD_TTL_SEC = 2 * 60 * 60; // signed upload ticket lifetime
 export const VIDEO_ABANDON_HOURS = 24; // UPLOADING longer than this → FAILED

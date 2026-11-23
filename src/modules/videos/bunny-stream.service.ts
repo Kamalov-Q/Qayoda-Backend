@@ -37,7 +37,7 @@ export interface UploadTicket {
 /**
  * Bunny Stream, as much of it as this app uses.
  *
- * Why a video service at all: transcoding one 60-second clip into three
+ * Why a video service at all: transcoding one short clip into three
  * qualities is a minute of CPU, and doing it here would mean the API process
  * competing with ffmpeg for a core while a phone holds 40 MB of request body
  * in its memory. Bunny encodes for free, serves HLS from a CDN, and — the

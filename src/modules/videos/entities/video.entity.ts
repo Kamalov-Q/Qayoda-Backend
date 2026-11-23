@@ -56,7 +56,7 @@ export class Video {
 
   /**
    * As Bunny measured the encoded file, not as the phone described it. The
-   * 60-second limit is enforced against this number, which is why nothing is
+   * duration limit is enforced against this number, which is why nothing is
    * charged until it exists.
    */
   @Column({ name: 'duration_sec', type: 'real', nullable: true })
